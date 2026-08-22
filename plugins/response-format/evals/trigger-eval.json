@@ -16,7 +16,7 @@
   {"query": "just give me the short version, i don't need the whole explanation", "should_trigger": false},
   {"query": "our incident postmortems are all over the place. draft a markdown template with sections for timeline, impact, root cause and action items that the team can copy", "should_trigger": false},
   {"query": "the dates in this csv are MM/DD/YYYY and pandas is reading them as strings — what's the right format string for pd.to_datetime", "should_trigger": false},
-  {"query": "review this diff before i merge it, it touches the auth middleware", "should_trigger": false},
-  {"query": "i want the status line at the bottom of my terminal to show the git branch and the model name", "should_trigger": false},
+  {"query": "can you sprinkle a few emoji at the start of each heading in docs/CONTRIBUTING.md so it's easier to scan, like we did with the checklist doc", "should_trigger": false},
+  {"query": "our Jira board has swimlanes named Needs Info, Done, Next Sprint and Blocked — write a script against the API that reorders them so Blocked comes right after Needs Info", "should_trigger": false},
   {"query": "summarize what we changed in the last three commits so i can paste it into standup", "should_trigger": false}
 ]
