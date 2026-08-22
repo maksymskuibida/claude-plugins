@@ -16,12 +16,12 @@ End every turn that **reports on work** with these, in order, omitting any that 
 
 ⏳ **Needs you** · ✅ **Done** · ▶️ **Next** · ⚠️ **Risks / uncertain**
 
-- **`Needs you` is never buried.** It is the part the user must act on; the rest can wait.
+- **`Needs you` comes first, always.** It is the part the user must act on; the rest can wait.
 - **Every bullet carries its consequence.** "`.env.local` missing → blocks !24 → blocks the T5 demo",
   not "waiting on the env file".
 - **One line per bullet.** If it needs a paragraph it belongs in `⚠️`, or in a file they can open.
-- **Skip the structure for conversational turns.** A direct question gets a direct answer. This is
-  for turns where something was done, is running, or is blocked.
+- **Skip the structure for small conversational turns.** A direct question gets a direct answer.
+  This is for turns where something was done, is running, or is blocked.
 
 ## Decisions
 

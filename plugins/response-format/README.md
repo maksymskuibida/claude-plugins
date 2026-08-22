@@ -14,7 +14,7 @@ Plus three rules that do most of the work:
 - **Nothing is claimed without verification.** Blocked, untested and uncertain get said out loud —
   including when a subagent's self-report turns out not to match what actually happened.
 
-Conversational turns skip the structure entirely; a direct question still gets a direct answer.
+Small conversational turns skip the structure entirely; a direct question still gets a direct answer.
 
 ## Install
 
@@ -30,14 +30,14 @@ Conversational turns skip the structure entirely; a direct question still gets a
 
 | Piece | Effect |
 |---|---|
-| `output-styles/report-format.md` | The operative rules, ~550 tokens, in the system prompt every turn. |
-| `skills/response-format/` | The reasoning behind the format. Loaded on demand, as `response-format:response-format`. |
+| `output-styles/report-format.md` | The operative rules, ~500–560 tokens (a chars/4 estimate — ~560 for the whole file including frontmatter, ~505 for the body alone), in the system prompt every turn. |
+| `skills/response-format/` | The reasoning behind the format. Loaded on demand; installed plugin skills are namespaced `<plugin>:<skill>`, so this should list as `response-format:response-format`. |
 
 ## How it activates, and what that costs you
 
-The output style is marked `force-for-plugin: true`, so **it applies as soon as the plugin is
-enabled** — no `/config` step and nothing to paste into a CLAUDE.md. That is deliberate: a house
-style nobody has to remember to switch on is the only kind that gets used.
+The output style is marked `force-for-plugin: true`, so **it applies without anyone selecting it** —
+no `/config` step and nothing to paste into a CLAUDE.md. That is deliberate: a house style nobody
+has to remember to switch on is the only kind that gets used.
 
 Three things follow from that, and none of them are worked around:
 
