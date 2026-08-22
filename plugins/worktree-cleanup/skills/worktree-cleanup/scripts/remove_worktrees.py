@@ -26,6 +26,17 @@ from scan_worktrees import (  # noqa: E402
     MAIN, PROTECTED, REVIEW, SAFE, STALE,
 )
 
+# How far into the future a liveness file's mtime may sit before it is refused
+# outright, rather than merely aged. Genuine clock/filesystem skew -- a file
+# collected onto a network mount, an archive restored with its original
+# timestamps, a host whose clock is a few minutes fast -- is real and should not
+# trip this. But "age" below is computed as (now - written), so a future mtime
+# makes it *negative*, which is smaller than every max-age threshold and would
+# sail through the "too old" check that exists right next to it. Five minutes
+# matches the default --liveness-max-age, so this refuses exactly the skew that
+# staleness checking on the other side already treats as material.
+FUTURE_MTIME_TOLERANCE_MINUTES = 5.0
+
 
 def liveness_objections(files, plan, live_paths, live_names, max_age_minutes):
     """Reasons the supplied liveness data is not evidence about *now*. Empty = fresh.
@@ -64,6 +75,12 @@ def liveness_objections(files, plan, live_paths, live_names, max_age_minutes):
             written = os.path.getmtime(real)
         except OSError as exc:
             objections.append(f"{label} {path} cannot be read: {exc}")
+            continue
+        skew = (written - time.time()) / 60.0
+        if skew > FUTURE_MTIME_TOLERANCE_MINUTES:
+            objections.append(f"{label} {path} has a future mtime ({skew:.0f} min ahead "
+                              "of now), which is not evidence collected just now -- it "
+                              "cannot be aged, so it cannot be trusted")
             continue
         if scanned_at and written < scanned_at:
             age = (scanned_at - written) / 60.0
@@ -331,8 +348,15 @@ def main():
                 continue
             git(["worktree", "prune"], cwd=entry["repo"])
             # Porcelain and an exact compare: `entry["path"] in still` is a substring
-            # test, so a surviving /a/bc registration made /a/b look un-pruned.
-            still = git(["worktree", "list", "--porcelain"], cwd=entry["repo"])[1]
+            # test, so a surviving /a/bc registration made /a/b look un-pruned. And the
+            # listing's own exit code has to be checked -- ignoring it meant a failed
+            # `git worktree list` parsed as an empty `registered` set, so every stale
+            # entry silently reported "pruned" whether or not the prune actually ran.
+            rc, still = git(["worktree", "list", "--porcelain"], cwd=entry["repo"])
+            if rc != 0:
+                failed.append((entry, f"could not confirm prune: git worktree list "
+                                       f"exited {rc}"))
+                continue
             registered = {l[len("worktree "):] for l in still.splitlines()
                           if l.startswith("worktree ")}
             if entry["path"] in registered:

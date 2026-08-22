@@ -44,8 +44,8 @@ rather than picking a favourite.
    directory's non-git content, and the class most likely to be irreplaceable is the
    one git hides: **ignored** files. `git status --porcelain` never lists them, so the
    scanner asks for `--ignored=matching`, subtracts recognisable build output
-   (`node_modules/`, `dist/`, `.venv/`, `target/`, `.next/`, `coverage/`, …) and treats
-   what remains — `.env`, local dumps, machine-specific config — as data. Data
+   (`node_modules/`, `dist/`, `build/`, `.venv/`, `target/`, `.next/`, `coverage/`, …)
+   and treats what remains — `.env`, local dumps, machine-specific config — as data. Data
    downgrades a worktree to `review` and is named in the report under every verdict.
 
 2. **Reported liveness** — is a session or agent working here? Two listings are
@@ -191,9 +191,15 @@ called `build/` or `coverage/` will have it silently subtracted. When a `safe` o
 `review` group is about to be deleted and the user cares about a particular worktree,
 `ls -a` it before agreeing.
 
-**`git worktree remove` refuses on "Directory not empty."** Untracked build output
-blocks it. This is not a safety signal — recoverability was already established — so
-the remover falls back to deleting the directory and pruning the registration.
+**`git worktree remove` escalates in three rungs, not two.** Plain `git worktree
+remove` is tried first, and it should simply succeed since recoverability was already
+established. If git refuses because the tree "contains modified or untracked files,
+use --force to delete it," that refusal is not new information, so the remover
+retries with `--force` and reports `removed (--force)` — this is the rung that clears
+ordinary untracked build output, not the fallback below it. Only if git *still* fails,
+reporting it could not finish clearing the directory (e.g. "Directory not empty"),
+does the remover fall back to deleting the directory itself with `shutil.rmtree` and
+pruning the registration, reported as `removed (rmtree + prune)`.
 
 **A deleted worktree can come back.** Tooling that owns a worktree may recreate it
 within seconds. If a path reappears after removal, leave it alone and tell the user;

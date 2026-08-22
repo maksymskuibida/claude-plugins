@@ -20,8 +20,8 @@ miss:
    That last omission matters most. Removing a worktree never deletes commits — they
    live in the common `.git/objects` — so ignored files are the only class that
    removal destroys irreversibly. The scanner asks for them explicitly, subtracts
-   recognisable build output (`node_modules/`, `dist/`, `.venv/`, `target/`, …) and
-   holds back what remains, naming it in the report.
+   recognisable build output (`node_modules/`, `dist/`, `build/`, `.venv/`, `target/`,
+   `coverage/`, …) and holds back what remains, naming it in the report.
 2. **Reported liveness** — is a session or agent working here? Session listings and
    agent listings each have a blind spot, so both are used.
 3. **Observed recency** — when was the directory last touched? Depends on nothing
@@ -64,7 +64,7 @@ Both are Python 3 stdlib only, no dependencies.
 bash tests/regression.sh
 ```
 
-66 assertions over a throwaway two-repo fixture covering every risk class:
+69 assertions over a throwaway two-repo fixture covering every risk class:
 classification, ignored data held back while build output is not, the refusal to act
 without liveness data, the happy path, four race conditions injected between scan and
 removal (each asserting *which* gate caught it, not merely that something did), stale
@@ -80,9 +80,13 @@ revision of this file claimed coverage the suite did not have:
   directory leaves `shutil.rmtree` able to clear it either, so the condition cannot be
   staged from the filesystem. What the test covers is our fallback — the branch taken,
   the note reported, the directory and registration gone — not git's deletion. The
-  **failure** path (`rmtree` raising) is tested against a real unreadable directory.
-- The suite is the only gate on this code; it runs in CI on every push and PR
-  (`.github/workflows/regression.yml`).
+  **failure** path (`rmtree` raising) is tested against a top-level symlink, which
+  `shutil.rmtree` refuses to follow by design. That was chosen over an unreadable
+  directory because a permissions-based failure does not reproduce under a root CI
+  runner, where every directory is readable regardless of its mode bits.
+- The suite runs in CI on every push and PR (`.github/workflows/regression.yml`), but
+  `main` has no branch protection, so a passing run is not currently required before a
+  merge can happen — it reports, it does not gate.
 
 ## Install
 

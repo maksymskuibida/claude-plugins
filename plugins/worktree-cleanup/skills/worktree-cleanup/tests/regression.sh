@@ -151,6 +151,19 @@ out=$(R --live-paths-file "$W/live-fresh.txt"); rc=$?
 chk "genuinely fresh data: accepted" "$rc" "0"
 [ -d "$T/wt-feature-done" ] && bad "genuinely fresh data: removal proceeds" || ok "genuinely fresh data: removal proceeds"
 
+# A file whose mtime is in the *future* is neither "before the scan" nor "too old" --
+# (now - written) goes negative, which used to sail under every max-age check. That
+# let a liveness file with three-day-stale contents pass simply by being touched
+# with a future timestamp, restoring exactly the blind trust this gate exists to end.
+fresh
+scan --live-paths-file "$W/live-scan.txt" --json "$W/r7c.json"
+echo "/nonexistent/other" > "$W/live-future.txt"; touch -t 209901010000 "$W/live-future.txt"
+out=$(python3 $S/remove_worktrees.py "$W/r7c.json" --include safe --execute \
+        --live-paths-file "$W/live-future.txt" 2>&1); rc=$?
+chk "future-mtime liveness file: exit" "$rc" "2"
+has "future-mtime liveness file: why" "$out" "future mtime"
+[ -d "$T/wt-feature-done" ] && ok "future-mtime liveness file: nothing deleted" || bad "future-mtime liveness file: nothing deleted"
+
 fresh
 scan --live-paths-file "$W/live-scan.txt" --json "$W/r7b.json"
 python3 $S/remove_worktrees.py "$W/r7b.json" --include safe --assume-no-live-sessions --execute >/dev/null 2>&1
