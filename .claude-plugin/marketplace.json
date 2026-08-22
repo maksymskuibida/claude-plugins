@@ -10,6 +10,12 @@
       "source": "./plugins/response-format",
       "description": "A house style for Claude's replies: an ask-first report structure, consequence-bearing bullets, decisions through the question UI, and a hard bias against unverified claims.",
       "version": "1.0.0"
+    },
+    {
+      "name": "worktree-cleanup",
+      "source": "./plugins/worktree-cleanup",
+      "description": "Find and remove orphaned git worktrees across many repos, gated on unpushed work, live sessions, and recent activity — re-verified at the moment of deletion, not at scan time.",
+      "version": "1.0.0"
     }
   ]
 }

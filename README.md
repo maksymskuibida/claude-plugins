@@ -30,6 +30,7 @@ Both forms are verified working with the `claude` CLI (`claude plugin marketplac
 | Plugin | What it does |
 |---|---|
 | [`response-format`](plugins/response-format) | Structured, ask-first replies — Needs you / Done / Next / Risks. Applies automatically on enable, from the next session. |
+| [`worktree-cleanup`](plugins/worktree-cleanup) | Reclaim disk from orphaned git worktrees without deleting unpushed work or a worktree a session is using. |
 
 ## Adding another plugin
 
