@@ -16,25 +16,48 @@ Plus three rules that do most of the work:
 
 Conversational turns skip the structure entirely; a direct question still gets a direct answer.
 
+## Install
+
+```bash
+/plugin marketplace add https://github.com/maksymskuibida/claude-plugins
+```
+
+```bash
+/plugin install response-format@mskuibida-tooling
+```
+
 ## What's inside
 
 | Piece | Effect |
 |---|---|
-| `output-styles/report-format.md` | The operative rules. Applies automatically — see below. |
-| `skills/response-format/` | The full reasoning behind the format. Loaded on demand, and when you want to change it. |
+| `output-styles/report-format.md` | The operative rules, ~550 tokens, in the system prompt every turn. |
+| `skills/response-format/` | The reasoning behind the format. Loaded on demand, as `response-format:response-format`. |
 
-## Automatic vs opt-in
+## How it activates, and what that costs you
 
-The output style is marked `force-for-plugin: true`, so **it activates as soon as the plugin is
+The output style is marked `force-for-plugin: true`, so **it applies as soon as the plugin is
 enabled** — no `/config` step and nothing to paste into a CLAUDE.md. That is deliberate: a house
 style nobody has to remember to switch on is the only kind that gets used.
 
-The trade: while enabled, it overrides whatever output style you had selected. If you would rather
-choose it yourself, delete the `force-for-plugin: true` line from `output-styles/report-format.md`
-and pick "Report format" from `/config` → Output style.
+Three things follow from that, and none of them are worked around:
 
-It also sets `keep-coding-instructions: true`, so Claude Code's normal coding behaviour is untouched
-— this changes how results are *reported*, not how work is done.
+- **It takes effect from your next session.** Output styles are read once at session start, so
+  after installing you need `/clear` or a fresh session. The session you installed from is unchanged.
+- **It overrides the output style you had selected**, for as long as the plugin is enabled. If two
+  enabled plugins both set `force-for-plugin`, the first one loaded wins.
+- **It does not reach subagents.** Subagents run their own system prompt, so a report written by a
+  subagent is not shaped by this style. Only the main session's replies are.
+
+If you would rather choose it yourself, delete the `force-for-plugin: true` line from
+`output-styles/report-format.md` and pick "Report format" under `/config` → Output style.
+
+It also sets `keep-coding-instructions: true`, which keeps Claude Code's built-in software
+engineering instructions in place — this changes how results are *reported*, not how work is done.
+Removing that line strips them, which is almost never what you want.
+
+**If you already carry these rules somewhere else** — a `~/.claude/CLAUDE.md` section, or a personal
+`~/.claude/skills/response-format/` — delete it when you install the plugin. Otherwise the rules sit
+in the system prompt twice and two near-identical skills compete to trigger.
 
 ## Making it yours
 
