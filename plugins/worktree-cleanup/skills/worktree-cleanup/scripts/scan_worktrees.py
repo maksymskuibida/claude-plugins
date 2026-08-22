@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -34,13 +35,23 @@ SAFE = "safe"            # clean, pushed, unused
 
 
 def run(args, cwd=None, timeout=120):
-    """Run a command, returning (rc, stdout). Never raises on non-zero exit."""
+    """Run a command, returning (rc, output). Never raises on non-zero exit.
+
+    On success the output is stdout alone, so callers can parse it. On failure it
+    is stdout plus stderr, because git reports *why* it failed on stderr and every
+    caller that inspects failed output wants the reason -- notably the
+    "Directory not empty" that selects the rmtree fallback in remove_worktrees.py,
+    which was previously matched against stdout and so could never fire.
+    """
     try:
         p = subprocess.run(
             args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL, text=True, timeout=timeout,
         )
-        return p.returncode, p.stdout.strip()
+        out = p.stdout.strip()
+        if p.returncode != 0:
+            out = "\n".join(part for part in (out, p.stderr.strip()) if part)
+        return p.returncode, out
     except (subprocess.TimeoutExpired, OSError) as exc:
         return 1, f"__error__ {exc}"
 
@@ -60,6 +71,8 @@ class Worktree:
     detached: bool = False
     dirty_count: int = 0        # tracked files modified/staged/deleted
     untracked_count: int = 0    # files git does not know about and does not ignore
+    ignored_count: int = 0      # ignored entries that are NOT recognisable build output
+    ignored_sample: list = field(default_factory=list)
     dirty_sample: list = field(default_factory=list)
     on_remote: list = field(default_factory=list)   # remote refs containing HEAD
     upstream: str = ""
@@ -90,6 +103,13 @@ def find_repos(roots, maxdepth):
         base_depth = root.rstrip("/").count("/")
         for dirpath, dirnames, _ in os.walk(root):
             depth = dirpath.rstrip("/").count("/") - base_depth
+            # Recognise the repo BEFORE applying the depth cut-off. Testing depth
+            # first skipped a repo sitting at exactly --maxdepth, which the flag's
+            # own help text promises to reach.
+            if ".git" in dirnames:
+                repos.append(dirpath)
+                dirnames[:] = []  # do not recurse into a repo looking for more repos
+                continue
             if depth >= maxdepth:
                 dirnames[:] = []
                 continue
@@ -99,9 +119,6 @@ def find_repos(roots, maxdepth):
                 if d not in {"node_modules", ".venv", "venv", "Library", ".Trash",
                              "vendor", "target", "build", "dist", ".next", ".cache"}
             ]
-            if ".git" in dirnames:
-                repos.append(dirpath)
-                dirnames[:] = []  # do not recurse into a repo looking for more repos
     return sorted(set(repos))
 
 
@@ -181,6 +198,16 @@ def newest_mtime(wt_path, depth=3):
     base = wt_path.rstrip("/").count("/")
     try:
         for dirpath, dirnames, filenames in os.walk(wt_path):
+            # Stat the skipped directories themselves -- one syscall each, no walk.
+            # A worktree mid-`npm install` or mid-build writes *only* into these, and
+            # is git-clean while it does it because they are ignored. Without this the
+            # recency gate reads a directory with a build running in it as idle.
+            for d in dirnames:
+                if d in SKIP_DIRS:
+                    try:
+                        newest = max(newest, os.path.getmtime(os.path.join(dirpath, d)))
+                    except OSError:
+                        continue
             if dirpath.rstrip("/").count("/") - base >= depth:
                 dirnames[:] = []
             dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
@@ -211,6 +238,42 @@ def idle_minutes(wt_path):
     return max(0.0, (time.time() - newest) / 60.0)
 
 
+# Ignored content that is reproducible by re-running a build or an installer.
+# Reclaiming exactly this is the point of the tool, so it must not hold anything
+# back. Everything else that git ignores -- .env, local database dumps,
+# machine-specific config -- is the one class of file that worktree removal
+# destroys irreversibly, because it exists nowhere but this directory.
+BUILD_OUTPUT_DIRS = {"node_modules", "dist", "build", ".venv", "venv", "target",
+                     ".next", "coverage", "__pycache__", ".pytest_cache", ".cache",
+                     ".gradle", ".tox", ".mypy_cache", ".ruff_cache", ".turbo"}
+
+
+def is_build_output(rel_path):
+    """True when an ignored entry is regenerable build output rather than data."""
+    parts = [p for p in rel_path.strip("/").split("/") if p]
+    return any(p in BUILD_OUTPUT_DIRS for p in parts)
+
+
+def parse_status(lines):
+    """Split `git status --porcelain --ignored=matching` into (dirty, untracked, ignored).
+
+    Ignored entries carry the `!!` prefix. git collapses a wholly-ignored directory
+    into a single entry (`!! node_modules/`) rather than listing its contents, so
+    asking for ignored files costs one line per ignore rule, not one per file.
+    """
+    dirty, untracked, ignored = [], [], []
+    for line in lines:
+        if line.startswith("!!"):
+            rel = line[2:].strip()
+            if not is_build_output(rel):
+                ignored.append(rel)
+        elif line.startswith("??"):
+            untracked.append(line)
+        else:
+            dirty.append(line)
+    return dirty, untracked, ignored
+
+
 def probe(wt: Worktree) -> Worktree:
     """Fill in the facts we need to judge whether removing ``wt`` is safe."""
     if not os.path.isdir(wt.path):
@@ -223,15 +286,19 @@ def probe(wt: Worktree) -> Worktree:
     # nothing but its own footprint.
     wt.idle_minutes = idle_minutes(wt.path)
 
-    rc, out = git(["status", "--porcelain"], cwd=wt.path)
+    # `--ignored=matching` is not optional decoration. A plain `git status
+    # --porcelain` never lists ignored files, so without it a worktree holding a
+    # .env full of production credentials is indistinguishable from an empty one
+    # and classifies as safe -- while a stray untracked .DS_Store is enough to
+    # protect a worktree. Removal destroys the .env and nothing ever mentions it.
+    rc, out = git(["status", "--porcelain", "--ignored=matching"], cwd=wt.path)
     if rc == 0 and out:
-        lines = out.splitlines()
-        # Ignored files never appear here, so anything untracked is at least
-        # plausibly real. Still, edits to tracked files and stray build output carry
-        # very different weight, and collapsing them hides which is which.
-        wt.untracked_count = sum(1 for l in lines if l.startswith("??"))
-        wt.dirty_count = len(lines) - wt.untracked_count
-        wt.dirty_sample = lines[:5]
+        dirty, untracked, ignored = parse_status(out.splitlines())
+        wt.untracked_count = len(untracked)
+        wt.dirty_count = len(dirty)
+        wt.dirty_sample = (dirty + untracked)[:5]
+        wt.ignored_count = len(ignored)
+        wt.ignored_sample = ignored[:5]
     elif rc != 0:
         # A repo we cannot interrogate is a repo we must not delete.
         wt.dirty_count = -1
@@ -316,6 +383,17 @@ def classify(wt: Worktree, protect_dirty=True, have_liveness=True, active_within
         # automated sweep while still letting someone clear them deliberately.
         (soft if allow_untracked else reasons).append(note)
 
+    if wt.ignored_count > 0:
+        shown = ", ".join(wt.ignored_sample[:3])
+        more = f" (+{wt.ignored_count - 3} more)" if wt.ignored_count > 3 else ""
+        # Deliberately soft, not protective. Protecting on all ignored content would
+        # make nothing ever safe, and reclaiming node_modules is the entire point --
+        # so recognisable build output is subtracted first (see BUILD_OUTPUT_DIRS)
+        # and only what is left, which is data, gets a human's attention.
+        soft.append(f"{wt.ignored_count} git-ignored file(s) not recognised as build "
+                    f"output — deleted permanently and recoverable from nowhere: "
+                    f"{shown}{more}")
+
     if not wt.on_remote:
         where = "detached HEAD" if wt.detached else f"branch {wt.branch}"
         reasons.append(f"HEAD ({where}) is on no remote branch — deleting loses these commits")
@@ -328,7 +406,8 @@ def classify(wt: Worktree, protect_dirty=True, have_liveness=True, active_within
     # Prefer the remote ref matching this worktree's own branch; when several refs
     # contain HEAD, naming an unrelated one reads as a mistake even when it is true.
     own = [r for r in wt.on_remote if wt.branch and r.endswith("/" + wt.branch)]
-    published = f"no tracked-file changes; HEAD published on {(own or wt.on_remote)[0]}"
+    published = ("no tracked-file changes; HEAD reachable from local ref "
+                 f"{(own or wt.on_remote)[0]} (not re-fetched)")
 
     if wt.ahead > 0:
         soft.append(f"{wt.ahead} commit(s) ahead of {wt.upstream} "
@@ -437,6 +516,13 @@ def main():
             for w in group:
                 print(f"  {human(w.size_kb):>9}  {w.path}")
                 print(f"             {'; '.join(w.reasons)}")
+                # Printed for every verdict, including protected, because "what
+                # irreplaceable thing is sitting in here" is the question a user
+                # approving a deletion actually needs answered.
+                if w.ignored_count:
+                    print(f"             ignored data ({w.ignored_count}): "
+                          f"{', '.join(w.ignored_sample)}"
+                          + (" …" if w.ignored_count > len(w.ignored_sample) else ""))
 
         print("\n" + "=" * 100)
         for verdict in (STALE, SAFE, REVIEW, PROTECTED, MAIN):
@@ -454,6 +540,13 @@ def main():
             "assume_no_live_sessions": args.assume_no_live_sessions,
             "allow_dirty": args.allow_dirty,
             "allow_untracked": args.allow_untracked,
+            "hostname": socket.gethostname(),
+            # The remover needs these to tell fresh liveness data from the very
+            # file this scan already consumed.
+            "live_paths_file": (os.path.realpath(os.path.expanduser(args.live_paths_file))
+                                if args.live_paths_file else ""),
+            "live_names_file": (os.path.realpath(os.path.expanduser(args.live_names_file))
+                                if args.live_names_file else ""),
             "live_paths": live_paths,
             "live_names": live_names,
             "worktrees": [asdict(w) for w in worktrees],

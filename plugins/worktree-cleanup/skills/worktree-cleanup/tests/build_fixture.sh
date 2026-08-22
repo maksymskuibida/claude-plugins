@@ -16,7 +16,7 @@ mk_repo() {  # $1 = repo name
   git config commit.gpgsign false
   mkdir -p src
   echo "console.log('$1');" > src/index.js
-  echo "node_modules/" > .gitignore
+  printf 'node_modules/\ndist/\n.env\n' > .gitignore
   git add -A && git commit -qm "initial commit"
   git branch -M main && git push -q -u origin main
   cd ..
@@ -42,6 +42,23 @@ add_dirty() {  # repo, wt, branch -> published but uncommitted edits (PROTECTED)
   echo "console.log('edited, not committed');" > "$2/src/index.js"
 }
 
+add_ignored_data() {  # repo, wt, branch -> clean + published, but holds ignored DATA (REVIEW)
+  # The class the scanner was blind to: git status --porcelain never lists these,
+  # so the worktree read as spotless while holding the only copy of a secret.
+  cd "$1"; git worktree add -q "../$2" -b "$3" >/dev/null 2>&1
+  cd "../$2" && git push -q -u origin "$3" && cd ..
+  mkdir -p "$2/node_modules/lodash" "$2/dist"
+  echo "// dep" > "$2/node_modules/lodash/i.js"   # build output: must NOT hold it back
+  echo "// built" > "$2/dist/bundle.js"           # build output: must NOT hold it back
+  echo "DB_PASSWORD=hunter2" > "$2/.env"          # data: must hold it back
+}
+
+add_untracked_only() {  # repo, wt, branch -> clean + published, one untracked file (PROTECTED)
+  cd "$1"; git worktree add -q "../$2" -b "$3" >/dev/null 2>&1
+  cd "../$2" && git push -q -u origin "$3" && cd ..
+  echo "scratch" > "$2/notes.txt"
+}
+
 add_detached_pushed() {  # repo, wt -> detached at a published commit (SAFE)
   cd "$1"; SHA=$(git rev-parse main); git worktree add -q --detach "../$2" "$SHA" >/dev/null 2>&1; cd ..
 }
@@ -57,6 +74,8 @@ add_detached_pushed webapp wt-review-072f6e
 add_pushed        api    wt-bugfix-shipped     fix/null-guard
 add_local_only    api    wt-spike              spike/new-parser
 add_pushed        api    wt-active-session     feat/reports
+add_ignored_data  webapp wt-secrets            feat/reporting-api
+add_untracked_only api   wt-untracked          chore/notes
 
 # a registration whose directory a human already deleted by hand
 cd webapp; git worktree add -q ../wt-vanished -b chore/vanished >/dev/null 2>&1
@@ -65,7 +84,6 @@ rm -rf wt-vanished
 cd "$DEST"
 
 # make wt-active-session look like something is working in it right now
-touch "$DEST/api/wt-active-session/src/index.js" 2>/dev/null || true
 find "$DEST/wt-active-session" -exec touch {} \; 2>/dev/null || true
 touch "$DEST/wt-active-session" 2>/dev/null || true
 

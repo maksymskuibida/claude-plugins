@@ -14,28 +14,35 @@ ago.
 A worktree is only removable when all three agree, and each catches things the others
 miss:
 
-1. **Recoverability** — is HEAD reachable from a remote branch, and is the tree clean?
-   The only gate that protects against permanent loss. `git status` alone does not
-   answer this, and upstream/ahead counts miss detached HEADs entirely.
+1. **Recoverability** — is HEAD reachable from a remote branch, is the tree clean, and
+   what non-git content is in there? `git status` alone answers none of it: it misses
+   detached HEADs (as do upstream/ahead counts), and it never lists **ignored** files.
+   That last omission matters most. Removing a worktree never deletes commits — they
+   live in the common `.git/objects` — so ignored files are the only class that
+   removal destroys irreversibly. The scanner asks for them explicitly, subtracts
+   recognisable build output (`node_modules/`, `dist/`, `.venv/`, `target/`, …) and
+   holds back what remains, naming it in the report.
 2. **Reported liveness** — is a session or agent working here? Session listings and
    agent listings each have a blind spot, so both are used.
 3. **Observed recency** — when was the directory last touched? Depends on nothing
    being reported correctly, which is why it catches what the first two miss.
 
-On a real machine during development, gate 1 held back 25 worktrees, gate 2 caught 5
-more that gate 1 called safe, and gate 3 caught 2 that both others missed. Any single
-gate alone would have destroyed something.
-
 ## The ordering matters more than the checks
 
 Scanning and deleting are separate acts. A worktree idle at scan time can be someone's
-working directory by the time you delete it. So `remove_worktrees.py` re-derives every
-verdict from current git state and current liveness at the moment of removal, and
-holds back anything that changed — a tree gone dirty, a session that claimed it, a
-HEAD that moved.
+working directory by the time you delete it. So `remove_worktrees.py` re-derives the
+recoverability and liveness verdicts from current git state and newly supplied
+liveness at the moment of removal, and holds back anything that changed — a tree gone
+dirty, a session that claimed it, a HEAD that moved. (Recency is re-derived only when
+a *third party* has written since the scan; otherwise the scan's reading is carried
+forward and aged, because the scan's own `git status` bumps the index mtime and a
+naive re-measure would hold back everything.)
 
-Dry-run is the default, and the remover refuses to execute at all without fresh
-liveness data.
+Dry-run is the default, and "fresh liveness data" is enforced rather than assumed: the
+remover refuses a liveness file that is the one the scan read, that predates the scan,
+or that is more than `--liveness-max-age` minutes old, and refuses a plan older than
+`--max-plan-age-hours` or produced on another machine. `--assume-no-live-sessions` is
+the explicit override — a claim a human makes, which a file cannot make for them.
 
 ## Usage
 
@@ -57,11 +64,25 @@ Both are Python 3 stdlib only, no dependencies.
 bash tests/regression.sh
 ```
 
-25 assertions over a throwaway two-repo fixture covering every risk class:
-classification, the refusal to act without liveness data, the happy path, four race
-conditions injected between scan and removal, and both branch-handling paths. Each
-asserts on the fixture's final on-disk state rather than on what a report claims,
-since a report can say a worktree was preserved that is not actually there.
+66 assertions over a throwaway two-repo fixture covering every risk class:
+classification, ignored data held back while build output is not, the refusal to act
+without liveness data, the happy path, four race conditions injected between scan and
+removal (each asserting *which* gate caught it, not merely that something did), stale
+and foreign plans, both branch-handling paths, both branches of the `rmtree` fallback,
+and units a fixture cannot reach.
+
+Each asserts on the fixture's final on-disk state or on the remover's own output,
+rather than on what a summary claims. Two caveats stated plainly, because the previous
+revision of this file claimed coverage the suite did not have:
+
+- The `rmtree` fallback's **success** path is reached by injecting a `git worktree
+  remove` failure with a shim on `PATH`. Nothing that stops git from clearing a
+  directory leaves `shutil.rmtree` able to clear it either, so the condition cannot be
+  staged from the filesystem. What the test covers is our fallback — the branch taken,
+  the note reported, the directory and registration gone — not git's deletion. The
+  **failure** path (`rmtree` raising) is tested against a real unreadable directory.
+- The suite is the only gate on this code; it runs in CI on every push and PR
+  (`.github/workflows/regression.yml`).
 
 ## Install
 

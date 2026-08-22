@@ -1,0 +1,41 @@
+name: worktree-cleanup regression
+
+# This suite is the only gate on this code. The plugin's own history is the argument
+# for running it here: two of the three defects in its second commit silently disabled
+# a safety gate and were found by *executing* the tool against a fixture, not by
+# reading it. Nothing else obliges a reviewer to run it before merge.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Identify git and python
+        run: git --version && python3 --version
+
+      - name: Configure git identity
+        # The fixture creates repos and commits; a runner has no global identity.
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name CI
+          git config --global init.defaultBranch main
+
+      - name: Run the regression suite
+        run: bash plugins/worktree-cleanup/skills/worktree-cleanup/tests/regression.sh
+
+      - name: Validate the marketplace and the plugin
+        # Best effort: the CLI is not always installable in CI, and a missing binary
+        # must not read as a validation failure.
+        run: |
+          if command -v claude >/dev/null 2>&1; then
+            claude plugin validate .
+            claude plugin validate plugins/worktree-cleanup
+          else
+            echo "claude CLI unavailable; skipping manifest validation"
+          fi
