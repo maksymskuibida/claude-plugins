@@ -18,6 +18,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, asdict
 
@@ -65,6 +66,8 @@ class Worktree:
     ahead: int = 0
     size_kb: int = 0
     idle_minutes: float = -1  # minutes since anything last touched it; -1 = unknown
+    post_probe_mtime: float = 0.0  # mtime our own probing left behind, so a later
+                                   # re-check can tell our footprint from someone else's
     live_reason: str = ""     # non-empty when a session/agent appears to be using it
     verdict: str = SAFE
     reasons: list = field(default_factory=list)
@@ -140,16 +143,23 @@ def measure(path):
         return 0
 
 
-def idle_minutes(wt_path):
-    """Minutes since anything last touched this worktree, or -1 if unknowable.
+SKIP_DIRS = {"node_modules", ".git", ".venv", "venv", "dist", "build", "target",
+             ".next", ".cache", "coverage", "__pycache__", ".pytest_cache"}
 
-    Session and agent listings can both miss a user: a worktree may be driven by a
-    process whose name matches the repo rather than the directory, or recreated by
-    tooling moments after deletion. Recency of use is an independent signal that
-    does not depend on any of that being reported correctly -- git touches the
-    per-worktree index and HEAD on essentially every operation, so a fresh mtime
-    there means something is working in this directory right now.
+
+def newest_mtime(wt_path, depth=3):
+    """Newest mtime across a worktree's git metadata and its source files.
+
+    Git metadata alone is not enough. A bare `git status` does not rewrite an index
+    that is already fresh, and editing a nested file does not bump the root
+    directory's mtime -- so a worktree someone is actively editing can look
+    untouched. Walking a few levels of source catches the thing that actually
+    matters, which is somebody changing files. Heavy generated directories are
+    skipped: they are large, they churn for reasons unrelated to human work, and
+    walking them would dominate the cost.
     """
+    newest = 0.0
+
     candidates = [wt_path]
     dotgit = os.path.join(wt_path, ".git")
     try:
@@ -162,16 +172,42 @@ def idle_minutes(wt_path):
                 candidates += [os.path.join(gitdir, n) for n in ("index", "HEAD", "logs/HEAD")]
     except OSError:
         pass
-
-    newest = 0.0
     for c in candidates:
         try:
             newest = max(newest, os.path.getmtime(c))
         except OSError:
             continue
+
+    base = wt_path.rstrip("/").count("/")
+    try:
+        for dirpath, dirnames, filenames in os.walk(wt_path):
+            if dirpath.rstrip("/").count("/") - base >= depth:
+                dirnames[:] = []
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            for name in filenames:
+                try:
+                    newest = max(newest, os.path.getmtime(os.path.join(dirpath, name)))
+                except OSError:
+                    continue
+    except OSError:
+        pass
+
+    return newest
+
+
+def idle_minutes(wt_path):
+    """Minutes since anything last touched this worktree, or -1 if unknowable.
+
+    Session and agent listings can both miss a user: a worktree may be driven by a
+    process whose name matches the repo rather than the directory, or recreated by
+    tooling moments after deletion. Recency of use is an independent signal that
+    does not depend on any of that being reported correctly -- git touches the
+    per-worktree index and HEAD on essentially every operation, so a fresh mtime
+    there means something is working in this directory right now.
+    """
+    newest = newest_mtime(wt_path)
     if newest == 0.0:
         return -1
-    import time
     return max(0.0, (time.time() - newest) / 60.0)
 
 
@@ -180,6 +216,12 @@ def probe(wt: Worktree) -> Worktree:
     if not os.path.isdir(wt.path):
         wt.exists = False
         return wt
+
+    # Read idle time FIRST. `git status` refreshes and rewrites the index, which
+    # bumps its mtime to now -- so probing in the other order makes every worktree
+    # look like it was touched a moment ago, and the recency gate would be measuring
+    # nothing but its own footprint.
+    wt.idle_minutes = idle_minutes(wt.path)
 
     rc, out = git(["status", "--porcelain"], cwd=wt.path)
     if rc == 0 and out:
@@ -214,7 +256,7 @@ def probe(wt: Worktree) -> Worktree:
                 wt.ahead = int(cnt)
 
     wt.size_kb = measure(wt.path)
-    wt.idle_minutes = idle_minutes(wt.path)
+    wt.post_probe_mtime = newest_mtime(wt.path)
     return wt
 
 
@@ -407,6 +449,7 @@ def main():
     if args.json:
         payload = {
             "roots": args.roots,
+            "scanned_at": time.time(),
             "active_within": args.active_within,
             "assume_no_live_sessions": args.assume_no_live_sessions,
             "allow_dirty": args.allow_dirty,

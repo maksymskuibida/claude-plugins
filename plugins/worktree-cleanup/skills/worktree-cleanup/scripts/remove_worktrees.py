@@ -17,16 +17,17 @@ import json
 import os
 import shutil
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scan_worktrees import (  # noqa: E402
-    Worktree, classify, git, human, match_live, probe, read_lines,
+    Worktree, classify, git, human, match_live, newest_mtime, probe, read_lines,
     MAIN, PROTECTED, REVIEW, SAFE, STALE,
 )
 
 
 def reverify(entry, live_paths, live_names, allow_dirty, active_within, assume_no_live,
-             allow_untracked):
+             allow_untracked, scanned_at=0.0):
     """Re-derive the verdict from scratch. Returns (verdict, reasons)."""
     wt = Worktree(path=entry["path"], repo=entry["repo"],
                   is_main=entry["is_main"], head=entry["head"],
@@ -48,6 +49,25 @@ def reverify(entry, live_paths, live_names, allow_dirty, active_within, assume_n
     wt.head = head_now
 
     probe(wt)
+
+    # Recency needs care here. The scan itself ran `git status`, which rewrites the
+    # index and bumps its mtime -- so a naive re-measure would report every worktree
+    # as touched seconds ago and hold back the entire plan. The scan recorded the
+    # mtime its own probing left behind, so a value newer than that is the only
+    # evidence of a *third party*. Otherwise carry the scan's reading forward, aged
+    # by however long the human spent deciding.
+    current = newest_mtime(wt.path)
+    if scanned_at and entry.get("post_probe_mtime"):
+        # Strict comparison, no slack. The scan recorded this value with the same
+        # code on the same filesystem, so any increase is somebody else's write --
+        # and a tolerance window here is precisely a window in which a fast
+        # scan-then-delete misses a session that started moments ago.
+        if current > entry["post_probe_mtime"]:
+            wt.idle_minutes = max(0.0, (time.time() - current) / 60.0)
+        else:
+            elapsed = max(0.0, (time.time() - scanned_at) / 60.0)
+            wt.idle_minutes = max(0.0, entry.get("idle_minutes", -1)) + elapsed
+
     wt.live_reason = match_live(wt, live_paths, live_names)
     classify(wt, protect_dirty=not allow_dirty,
              have_liveness=bool(live_paths or live_names) or assume_no_live,
@@ -152,15 +172,29 @@ def main():
 
     for entry in targets:
         if entry["verdict"] == STALE:
-            ok, note = (True, "pruned") if not args.execute else remove_one(entry, True)
-            if not os.path.isdir(entry["path"]):
-                git(["worktree", "prune"], cwd=entry["repo"])
-            (removed if ok else failed).append((entry, note))
+            # The directory is already gone, so `git worktree remove` would fail with
+            # "is not a working tree" -- reporting a failure for work that succeeded.
+            # Pruning the registration is the whole job here.
+            if not args.execute:
+                removed.append((entry, "would prune stale registration"))
+                continue
+            if os.path.isdir(entry["path"]):
+                # It came back between the scan and now; that is not ours to delete.
+                held.append((entry, PROTECTED,
+                             ["directory reappeared since the scan — something recreated it"]))
+                continue
+            git(["worktree", "prune"], cwd=entry["repo"])
+            still = git(["worktree", "list"], cwd=entry["repo"])[1]
+            if entry["path"] in still:
+                failed.append((entry, "prune did not clear the registration"))
+            else:
+                removed.append((entry, "stale registration pruned (freed no disk)"))
             continue
 
         verdict, reasons = reverify(entry, live_paths, live_names, args.allow_dirty,
                                     active_within, args.assume_no_live_sessions,
-                                    args.allow_untracked or plan.get('allow_untracked', False))
+                                    args.allow_untracked or plan.get('allow_untracked', False),
+                                    plan.get('scanned_at', 0.0))
         if verdict not in args.include:
             held.append((entry, verdict, reasons))
             continue

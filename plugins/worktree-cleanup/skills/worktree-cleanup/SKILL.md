@@ -47,8 +47,15 @@ rather than picking a favourite.
 3. **Observed recency** — when was this directory last touched? Gates 1 and 2 both
    depend on something being reported correctly, and both can miss a worktree driven
    by a process named after the repo rather than the directory, or one that tooling
-   recreates seconds after deletion. Filesystem mtime on the per-worktree git index
-   depends on nothing being reported at all.
+   recreates seconds after deletion. Filesystem mtimes depend on nothing being
+   reported at all.
+
+   Know what this gate does and does not see. It detects *changes* — files written,
+   commits made, branches switched — by looking at git metadata and a few levels of
+   source. It does not detect pure inspection: someone reading files, or running
+   `git status` against an already-fresh index, leaves no trace. That is a reasonable
+   line, since reading a worktree is not a reason to keep it, but do not read a large
+   idle time as proof that nobody has the directory open.
 
 In testing on a real machine, gate 1 held back 25 worktrees, gate 2 caught 5 more
 that gate 1 called safe, and gate 3 caught 2 that both others missed — including one

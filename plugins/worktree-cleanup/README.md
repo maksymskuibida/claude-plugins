@@ -51,6 +51,18 @@ python3 remove_worktrees.py /tmp/plan.json \
 
 Both are Python 3 stdlib only, no dependencies.
 
+## Tests
+
+```bash
+bash tests/regression.sh
+```
+
+25 assertions over a throwaway two-repo fixture covering every risk class:
+classification, the refusal to act without liveness data, the happy path, four race
+conditions injected between scan and removal, and both branch-handling paths. Each
+asserts on the fixture's final on-disk state rather than on what a report claims,
+since a report can say a worktree was preserved that is not actually there.
+
 ## Install
 
 ```bash
