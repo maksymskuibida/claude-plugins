@@ -20,6 +20,7 @@ Replace `<this-repo-url>` with the git URL once this is pushed, or a local path 
 | Plugin | What it does |
 |---|---|
 | [`response-format`](plugins/response-format) | Structured, ask-first replies — Needs you / Done / Next / Risks. Applies automatically on enable. |
+| [`worktree-cleanup`](plugins/worktree-cleanup) | Reclaim disk from orphaned git worktrees without deleting unpushed work or a worktree a session is using. |
 
 ## Adding another plugin
 
