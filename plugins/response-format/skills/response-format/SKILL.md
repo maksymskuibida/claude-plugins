@@ -1,6 +1,6 @@
 ---
 name: response-format
-description: The house rules for how replies to this user are shaped — the ⏳ Needs you / ✅ Done / ▶️ Next / ⚠️ Risks structure, consequence-bearing bullets, AskUserQuestion for decisions, the length budget, and the ban on claiming unverified progress. The short version is already in context via this plugin's "Report format" output style; load this skill when the user wants to change, relax, extend or port that reply format ("drop the emoji headers", "add a Decisions section", "120 words is too tight"), when they push back on how a summary was written or where something was filed ("why was that under Done", "you buried the thing I had to do"), or when a turn is genuinely hard to shape — many parallel threads, a partial or unverified result, a correction to something you said earlier. Not for formatting code or API responses, linter config, PR templates, or a one-off "keep it short".
+description: The house rules for how replies to this user are shaped — the ⏳ Needs you / ✅ Done / ▶️ Next / ⚠️ Risks structure, consequence-bearing bullets, AskUserQuestion for decisions, the length budget, and the ban on claiming unverified progress. The short version is normally already in context via this plugin's "Report format" output style; load this skill when the user wants to change, relax, extend or port that reply format ("drop the emoji headers", "add a Decisions section", "120 words is too tight"), when they push back on how a summary was written or where something was filed ("why was that under Done", "you buried the thing I had to do"), or when a turn is genuinely hard to shape — many parallel threads, a partial or unverified result, a correction to something you said earlier. Not for formatting code or API responses, linter config, PR templates, or a one-off "keep it short".
 ---
 
 # How to answer — the full house style
@@ -82,8 +82,8 @@ credential, merge a PR, edit a file you cannot reach — is not a question. That
 **Short by default — aim for under ~120 words.** Most turns are three to six lines.
 
 Expand only when the content genuinely carries it: a confirmed defect, a correction to something you
-said earlier, a design decision and its reasoning, or an explanation the user asked for. Even then,
-stay inside the structure — length is never a reason to drop it.
+said earlier, or an explanation the user asked for. Even then, stay inside the structure — length is
+never a reason to drop it.
 
 **Detail belongs where it persists.** A full defect write-up goes in the PR comment, the QA report or
 the evidence file; the reply gets one line and a pointer. Anything you would otherwise have to
