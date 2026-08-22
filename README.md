@@ -42,3 +42,26 @@ Validate before pushing:
 ```bash
 claude plugin validate . && claude plugin validate plugins/<name>
 ```
+
+## Repo permissions
+
+`.claude/settings.json` at the repo root grants two Bash permission allow rules so agent sessions
+working in this repo can apply PR labels and merge approved PRs without the auto-mode classifier
+stopping them:
+
+- `Bash(gh pr edit *)`
+- `Bash(gh pr merge *)`
+
+That's it — no force-push variant (`git push --force`, `-f`, or otherwise) is included. A rewritten
+public branch is exactly the class of action that should keep prompting, so that stays excluded on
+purpose.
+
+This is a **project-scoped, tracked** file rather than a rule in `~/.claude/settings.json`. A
+user-level rule would let any session on this machine merge PRs in *any* repo, including unrelated
+work repos; scoping it to this repo's checked-in settings keeps the blast radius to `claude-plugins`
+and keeps the grant visible in git history and reviewable in a PR.
+
+**It takes effect from your next session.** Project settings are read when a session starts, and
+the settings watcher only watches directories that already contained a settings file at session
+start — so a session already running in this repo (or in a worktree of it) when this merges will
+not pick the rules up. It needs a restart or a new session.
