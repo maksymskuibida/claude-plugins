@@ -1,0 +1,22 @@
+[
+  {"query": "i'm getting sick of the emoji headers on every reply. can you drop the ⏳/✅ things but keep the rest of how you summarize work? and make it stick for future sessions too", "should_trigger": true},
+  {"query": "you just gave me six paragraphs about the migration and the thing i actually had to do (rotate the DB password) was in the last sentence. that's exactly backwards — fix how you write these summaries", "should_trigger": true},
+  {"query": "quick q about your own format: if a task is half done and the other half is blocked on CI, does that go under Done, Next, or Risks? i keep seeing it in Done and it's misleading", "should_trigger": true},
+  {"query": "i've got 4 test failures, a half-finished refactor in src/parsers/, an MR waiting on my review, and i need to decide whether we ship the flag on monday. write me the wrap-up for this session — i honestly don't know how you'd fit all that into the usual four sections", "should_trigger": true},
+  {"query": "add a fifth section to the reply structure — something like 📌 Decisions, for calls i made that the user should know about but that aren't risks. update wherever that format is defined", "should_trigger": true},
+  {"query": "when you asked me just now whether to use redis or postgres for the queue you wrote both options out as bullets in the chat. i thought that was supposed to go through the question picker thing?", "should_trigger": true},
+  {"query": "i'm setting up claude on my work laptop and i want the same reply style i have here. where does that live and how do i port it over", "should_trigger": true},
+  {"query": "under 120 words is too tight when you're explaining an actual architecture decision. loosen the length rule but don't let it turn into essays again", "should_trigger": true},
+  {"query": "the reviewer agent came back saying approved but its notes list two unresolved blockers, and you reported it as done. how should you have written that turn instead", "should_trigger": true},
+  {"query": "for a plain 'what does this env var do' question do you still need the Done/Next headers? feels like overkill but i'd rather you be consistent", "should_trigger": true},
+  {"query": "the /users endpoint returns snake_case but the frontend expects camelCase. change the response format in app/api/serializers.py and update the openapi spec", "should_trigger": false},
+  {"query": "prettier keeps reformatting my jsx onto one line and it's unreadable. what do i put in .prettierrc to stop it", "should_trigger": false},
+  {"query": "write the PR description for this branch — we follow the conventional-commits style and there's a template in .github/pull_request_template.md", "should_trigger": false},
+  {"query": "can you make the log output in cmd/worker/main.go structured json instead of the current printf lines, with level and request_id fields", "should_trigger": false},
+  {"query": "just give me the short version, i don't need the whole explanation", "should_trigger": false},
+  {"query": "our incident postmortems are all over the place. draft a markdown template with sections for timeline, impact, root cause and action items that the team can copy", "should_trigger": false},
+  {"query": "the dates in this csv are MM/DD/YYYY and pandas is reading them as strings — what's the right format string for pd.to_datetime", "should_trigger": false},
+  {"query": "can you sprinkle a few emoji at the start of each heading in docs/CONTRIBUTING.md so it's easier to scan, like we did with the checklist doc", "should_trigger": false},
+  {"query": "our Jira board has swimlanes named Needs Info, Done, Next Sprint and Blocked — write a script against the API that reorders them so Blocked comes right after Needs Info", "should_trigger": false},
+  {"query": "summarize what we changed in the last three commits so i can paste it into standup", "should_trigger": false}
+]

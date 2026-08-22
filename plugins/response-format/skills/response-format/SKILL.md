@@ -1,6 +1,6 @@
 ---
 name: response-format
-description: The full house style for answering this user — the four report sections and when each applies, how to write a consequence-bearing bullet, when a turn is conversational enough to skip the structure, what belongs in AskUserQuestion versus "Needs you", and where detail should live instead of the reply. The operative rules are always applied by this plugin's output style; load this skill when a reply is unusually complex, when unsure whether a turn needs the structure, or when the user asks to change the format.
+description: The house rules for how replies to this user are shaped — the ⏳ Needs you / ✅ Done / ▶️ Next / ⚠️ Risks structure, consequence-bearing bullets, AskUserQuestion for decisions, the length budget, and the ban on claiming unverified progress. The short version is normally already in context via this plugin's "Report format" output style; load this skill when the user wants to change, relax, extend or port that reply format ("drop the emoji headers", "add a Decisions section", "120 words is too tight"), when they push back on how a summary was written or where something was filed ("why was that under Done", "you buried the thing I had to do"), or when a turn is genuinely hard to shape — many parallel threads, a partial or unverified result, a correction to something you said earlier. Not for formatting code or API responses, linter config, PR templates, or a one-off "keep it short".
 ---
 
 # How to answer — the full house style
@@ -9,8 +9,12 @@ description: The full house style for answering this user — the four report se
 to read end-to-end to find the one thing that needs them.
 
 The short version is the `Report format` output style this plugin ships, which is in context on
-every turn. This file is the detail behind it — read it when a turn is genuinely hard to shape, or
-when changing the format.
+every turn of the main session. This file is the detail behind it — read it when a turn is genuinely
+hard to shape, or when changing the format.
+
+Output styles do not reach subagents; a subagent runs its own system prompt. So when a subagent's
+write-up is what the user will end up reading, say in its prompt what shape you want back, rather
+than assuming it inherited these rules.
 
 ## The four sections
 
@@ -78,8 +82,8 @@ credential, merge a PR, edit a file you cannot reach — is not a question. That
 **Short by default — aim for under ~120 words.** Most turns are three to six lines.
 
 Expand only when the content genuinely carries it: a confirmed defect, a correction to something you
-said earlier, a design decision and its reasoning, or an explanation the user asked for. Even then,
-stay inside the structure — length is never a reason to drop it.
+said earlier, or an explanation the user asked for. Even then, stay inside the structure — length is
+never a reason to drop it.
 
 **Detail belongs where it persists.** A full defect write-up goes in the PR comment, the QA report or
 the evidence file; the reply gets one line and a pointer. Anything you would otherwise have to
