@@ -1,0 +1,7 @@
+{
+  "name": "response-format",
+  "displayName": "Response Format",
+  "version": "1.0.0",
+  "description": "Structured, ask-first replies: what needs you, what changed, what happens next, what might be wrong.",
+  "author": { "name": "Maksym Skuibida" }
+}
