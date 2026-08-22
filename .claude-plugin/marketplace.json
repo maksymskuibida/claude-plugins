@@ -1,6 +1,9 @@
 {
   "name": "mskuibida-tooling",
-  "owner": { "name": "Maksym Skuibida" },
+  "owner": {
+    "name": "Maksym Skuibida"
+  },
+  "description": "Maksym Skuibida's personal Claude Code tooling — small, opinionated plugins.",
   "plugins": [
     {
       "name": "response-format",
