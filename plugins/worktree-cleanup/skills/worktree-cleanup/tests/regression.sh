@@ -12,8 +12,30 @@ export PYTHONDONTWRITEBYTECODE=1
 # Normalised once and used for both the mktemp template and the guard below, so
 # the two can never disagree: macOS exports TMPDIR with a trailing slash, and the
 # guard only matched today because BSD mktemp echoes the template back verbatim,
-# '//' and all. An mktemp that canonicalised the path would fail the guard.
-TMPROOT="${TMPDIR:-/tmp}"; TMPROOT="${TMPROOT%/}"
+# '//' and all. An mktemp that canonicalised the path would fail the guard. Every
+# trailing slash goes, not just one: TMPDIR=/tmp// would reproduce the same
+# mismatch one level deeper.
+TMPROOT="${TMPDIR:-/tmp}"
+while [ "${TMPROOT%/}" != "$TMPROOT" ]; do TMPROOT="${TMPROOT%/}"; done
+# Installed before mktemp rather than after it, because mktemp creates the
+# directory before the shell ever sees its name: a signal in that window leaked a
+# root for good -- the very failure the trap exists to prevent. The name check
+# makes cleanup a no-op while $W is still empty, and stops a mktemp that returned
+# some other path from turning cleanup into an rm -rf of a directory we never
+# created. chmod first because the fixture contains read-only git dirs. No `exit`
+# of its own, so the suite's own status still stands.
+W=
+cleanup() {
+  case "${W##*/}" in wtc-tests.??????*) ;; *) return 0 ;; esac
+  chmod -R u+rwX "$W" 2>/dev/null; rm -rf "$W"; W=
+}
+trap cleanup EXIT
+# Signals re-raise after cleaning: a plain handler would resume the script, and
+# exiting from it would report success for a run that was killed. Clearing $W in
+# cleanup makes the EXIT trap that follows the re-raise a no-op, so that second
+# rm -rf cannot land on a root mktemp has meanwhile handed to another run.
+trap 'cleanup; trap - INT; kill -INT $$' INT
+trap 'cleanup; trap - TERM; kill -TERM $$' TERM
 # Start from nothing, in a root unique to this run. mktemp -d guarantees both: an
 # empty directory (a scan that crashed in a previous run cannot leave a stale plan
 # for the assertions to read -- a green suite proving nothing about this revision)
@@ -24,29 +46,17 @@ W="$(mktemp -d "$TMPROOT/wtc-tests.XXXXXX")"
 # directory under $TMPROOT with our prefix. The absolute test is not redundant: a
 # relative TMPDIR passes a bare prefix match and would point the cleanup at a
 # relative path. mktemp has already created the directory by the time we look, so
-# a refusal that just exits leaks a root -- hence the reclaim.
+# a refusal has to give it back: exiting runs the EXIT trap, which reclaims it if
+# the name is unmistakably the template we asked for and leaves it alone if not.
 w_abs=; w_pfx=
 case "$W" in /*) w_abs=1 ;; esac
 case "$W" in "$TMPROOT"/wtc-tests.??????*) w_pfx=1 ;; esac
 if [ -z "$W" ]; then
   echo "refusing to run: mktemp -d failed under '$TMPROOT'" >&2; exit 1
 elif [ -z "$w_abs" ] || [ -z "$w_pfx" ] || [ ! -d "$W" ]; then
-  # Reclaim only what is unmistakably mktemp's own: a directory whose own name is
-  # the template we asked for. Anything else is a path we have no business rm -rf'ing.
-  case "${W##*/}" in wtc-tests.??????*) [ -d "$W" ] && rm -rf "$W" ;; esac
   echo "refusing to run: mktemp returned an unexpected path '$W' (wanted an existing absolute directory under '$TMPROOT')" >&2
   exit 1
 fi
-# A fixed root was self-healing -- the next run wiped it. A per-run root is not, so
-# every exit path has to take it along; before this, a Ctrl-C'd run leaked one for
-# good. chmod first because the fixture contains read-only git dirs. The EXIT trap
-# adds no `exit` of its own, so the suite's own status still stands.
-cleanup() { chmod -R u+rwX "$W" 2>/dev/null; rm -rf "$W"; }
-trap cleanup EXIT
-# Signals re-raise after cleaning: a plain handler would resume the script, and
-# exiting from it would report success for a run that was killed.
-trap 'cleanup; trap - INT; kill -INT $$' INT
-trap 'cleanup; trap - TERM; kill -TERM $$' TERM
 T=$W/regress
 PASS=0; FAIL=0
 
