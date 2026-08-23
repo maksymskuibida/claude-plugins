@@ -171,8 +171,8 @@ two overstates the result.
 - `--delete-branch` — also delete the branch each removed worktree held, instead of
   leaving it orphaned.
 - `--liveness-max-age N` (remover) — how many minutes old the liveness files may be,
-  default 5. They must also post-date the scan, and the same number also caps how far
-  into the *future* a liveness file's mtime may sit before it is refused outright.
+  default 5. They must also post-date the scan, and the forward window is the smaller
+  of N and five minutes.
 - `--max-plan-age-hours N` (remover) — refuse a plan older than this, default 24.
 
 There is no flag for uncommitted or untracked work, and adding one would be a

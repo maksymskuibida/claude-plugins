@@ -64,7 +64,7 @@ Both are Python 3 stdlib only, no dependencies.
 bash tests/regression.sh
 ```
 
-104 assertions over a throwaway two-repo fixture covering every risk class:
+110 assertions over a throwaway two-repo fixture covering every risk class:
 classification, ignored data held back while build output is not, the refusal to act
 without liveness data, the happy path, four race conditions injected between scan and
 removal (each asserting *which* gate caught it, not merely that something did), stale

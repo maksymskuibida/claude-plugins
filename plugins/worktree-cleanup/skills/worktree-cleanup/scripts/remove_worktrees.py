@@ -302,6 +302,11 @@ def main():
         print(f"could not read plan file {args.plan}: {exc}", file=sys.stderr)
         return 2
 
+    if not isinstance(plan, dict) or "worktrees" not in plan:
+        print(f"plan file has an unexpected shape (expected an object with a "
+              f"\"worktrees\" key): {args.plan}", file=sys.stderr)
+        return 2
+
     active_within = (args.active_within if args.active_within is not None
                      else plan.get("active_within", 120))
 

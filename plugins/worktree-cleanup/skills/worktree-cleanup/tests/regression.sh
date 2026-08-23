@@ -209,9 +209,9 @@ has "30 min ahead, --liveness-max-age 60: why" "$out" "future mtime"
 echo "== 7g. --liveness-max-age below 1 is rejected, not silently clamped =="
 # A value < 1 sends future_slack to zero or negative, which used to reject an
 # ordinary past-mtime file with "has a future mtime (-0 min ahead of now)" -- a bad
-# flag value should be told, not guessed at.
-fresh
-scan --live-paths-file "$W/live-scan.txt" --json "$W/r7g.json"
+# flag value should be told, not guessed at. argparse's type= conversion for
+# --liveness-max-age raises before the plan file is ever opened, so no fixture
+# rebuild is needed here -- "$W/r7g.json" is never read.
 echo "/nonexistent/other" > "$W/live-fresh-g.txt"
 out=$(python3 $S/remove_worktrees.py "$W/r7g.json" --include safe --execute \
         --liveness-max-age -1 --live-paths-file "$W/live-fresh-g.txt" 2>&1); rc=$?
@@ -392,7 +392,9 @@ PY
 out=$(python3 $S/remove_worktrees.py "$W/r10d.json" --include review \
         --assume-no-live-sessions --only "$T/wt-untracked" --execute 2>&1); rc=$?
 chk "old plan with allow_* keys does not crash the remover" "$rc" "3"
-has "wt-untracked held back on re-check" "$out" "wt-untracked"
+printf '%s' "$out" | grep -qE '⊘ .*/wt-untracked$' \
+    && ok  "wt-untracked held back on re-check" \
+    || bad "wt-untracked held back on re-check (no '⊘ .../wt-untracked' line in: $(printf '%s' "$out" | tr '\n' '|'))"
 has "held back as protected, not trusted as review" "$out" "now protected"
 [ -d "$T/wt-untracked" ] && ok "wt-untracked survives" || bad "wt-untracked survives"
 
@@ -411,6 +413,18 @@ out=$(python3 $S/remove_worktrees.py "$W/bad-plan.json" --assume-no-live-session
 chk "malformed JSON plan: exit" "$rc" "2"
 has "malformed JSON plan: clean message" "$out" "not valid JSON"
 chk "malformed JSON plan: no traceback" "$(echo "$out" | grep -c Traceback)" "0"
+
+echo "[]" > "$W/list-plan.json"
+out=$(python3 $S/remove_worktrees.py "$W/list-plan.json" --assume-no-live-sessions 2>&1); rc=$?
+chk "plan is a JSON list, not an object: exit" "$rc" "2"
+has "plan is a JSON list, not an object: clean message" "$out" "unexpected shape"
+chk "plan is a JSON list, not an object: no traceback" "$(echo "$out" | grep -c Traceback)" "0"
+
+echo '{"scanned_at": 0}' > "$W/no-worktrees-key.json"
+out=$(python3 $S/remove_worktrees.py "$W/no-worktrees-key.json" --assume-no-live-sessions 2>&1); rc=$?
+chk "plan object missing worktrees key: exit" "$rc" "2"
+has "plan object missing worktrees key: clean message" "$out" "unexpected shape"
+chk "plan object missing worktrees key: no traceback" "$(echo "$out" | grep -c Traceback)" "0"
 
 echo "== 11. a repo sitting at exactly --maxdepth is found =="
 mkdir -p "$W/deep/a/b"; ( cd "$W/deep/a/b" && /usr/bin/git init -q r && cd r && \
