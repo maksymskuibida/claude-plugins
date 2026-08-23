@@ -244,6 +244,63 @@ out=$(python3 $S/remove_worktrees.py "$W/r8-host.json" --include safe --assume-n
 has "plan from another machine refused" "$out" "was produced on some-other-laptop"
 [ -d "$T/wt-feature-done" ] && ok "neither plan deleted anything" || bad "neither plan deleted anything"
 
+echo "== 8b. dry-run says so when the plan would be refused at execute time =="
+# The three admission gates (plan age/hostname, liveness present, liveness fresh)
+# used to run only under --execute, so the same plan and the same flags printed
+# "Would remove: N" in dry-run and exited 2 with a refusal under --execute. That
+# preview is what an agent shows a human when asking them to approve a deletion, so
+# it has to describe what execution would actually do. Dry-run still prints the
+# table -- it now says first that --execute would refuse.
+fresh
+scan --assume-no-live-sessions --json "$W/r8b.json"
+python3 - "$W/r8b.json" "$W/r8b-old.json" <<'PY'
+import json, sys, time
+plan = json.load(open(sys.argv[1]))
+json.dump(dict(plan, scanned_at=time.time() - 72 * 3600), open(sys.argv[2], "w"))
+PY
+
+# 1. stale plan: the same refusal reason surfaces in dry-run, on stdout, above the table.
+out=$(python3 $S/remove_worktrees.py "$W/r8b-old.json" --include safe \
+        --assume-no-live-sessions 2>/dev/null); rc=$?
+has "dry-run warns it would be refused"   "$out" "WOULD BE REFUSED AT EXECUTE TIME"
+has "dry-run gives the same reason"       "$out" "re-scan rather than acting on it"
+has "dry-run still shows the table"       "$out" "Would remove:"
+has "dry-run footer points at the reason" "$out" "--execute would refuse this plan"
+chk "dry-run still exits 0"               "$rc"  "0"
+warn_line=$(printf '%s' "$out" | grep -n "WOULD BE REFUSED" | cut -d: -f1)
+table_line=$(printf '%s' "$out" | grep -n "Would remove:" | cut -d: -f1)
+[ -n "$warn_line" ] && [ "$warn_line" -lt "$table_line" ] \
+    && ok  "warning is printed above the table" \
+    || bad "warning is printed above the table (warning line '$warn_line', table line '$table_line')"
+[ -d "$T/wt-feature-done" ] && ok "dry-run deleted nothing" || bad "dry-run deleted nothing"
+
+# 2. missing liveness data reaches dry-run too -- the gate that fires most often.
+out=$(python3 $S/remove_worktrees.py "$W/r8b.json" --include safe 2>/dev/null)
+has "dry-run warns about missing liveness" "$out" "refusing to execute without liveness data"
+
+# 2b. --execute's stderr for the missing-liveness gate is one sentence in one line,
+# exactly as it was before this file grew a dry-run banner. A substring check (as
+# above) is blind to a heading/trailer that got split across two print() calls --
+# that is exactly the defect that shipped here once and slipped past this suite.
+execerr=$(python3 $S/remove_worktrees.py "$W/r8b.json" --include safe --execute 2>&1 >/dev/null)
+chk "execute missing-liveness stderr is byte-exact" "$execerr" \
+  "refusing to execute without liveness data. Re-check what is running right now and pass --live-paths-file / --live-names-file, or state explicitly that you checked with --assume-no-live-sessions."
+chk "execute missing-liveness stderr is a single line" "$(printf '%s' "$execerr" | wc -l | tr -d ' ')" "0"
+
+# 3. an admissible plan gets no banner at all: the warning must mean something.
+out=$(python3 $S/remove_worktrees.py "$W/r8b.json" --include safe \
+        --assume-no-live-sessions 2>/dev/null)
+chk "clean plan: no false warning" "$(printf '%s' "$out" | grep -c 'WOULD BE REFUSED')" "0"
+has "clean plan: ordinary dry-run footer" "$out" "re-run with --execute"
+
+# 4. --execute is unchanged: still stderr, still the first gate only, still exit 2.
+out=$(python3 $S/remove_worktrees.py "$W/r8b-old.json" --include safe \
+        --assume-no-live-sessions --execute 2>&1 >/dev/null); rc=$?
+chk "execute still exits 2"            "$rc"  "2"
+has "execute refusal still on stderr"  "$out" "refusing to execute this plan:"
+chk "execute prints no dry-run banner" "$(printf '%s' "$out" | grep -c 'WOULD BE REFUSED')" "0"
+[ -d "$T/wt-feature-done" ] && ok "execute deleted nothing" || bad "execute deleted nothing"
+
 echo "== 9. the rmtree fallback — the single most dangerous line =="
 # `git worktree remove` failing part-way is not reproducible on demand from the
 # filesystem (anything that stops git from unlinking stops shutil.rmtree too), so
