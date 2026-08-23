@@ -261,6 +261,72 @@ def remove_one(entry, execute, delete_branch=False):
     return True, note
 
 
+def admission_blocks(plan, live_paths, live_names, args):
+    """Every reason --execute would refuse this plan, as (heading, reasons, trailer).
+
+    Empty means the plan is admissible. These three gates -- plan age and hostname,
+    liveness data present at all, liveness data fresh -- used to be evaluated only
+    under ``--execute``, so the same plan and the same flags printed "Would remove: 3"
+    in dry-run and exited 2 with a refusal under --execute. That preview is exactly
+    what an agent shows a human when it asks them to approve a deletion, so it has to
+    describe what execution would actually do; a preview you must *run* to discover it
+    was never going to run is worse than no preview at all.
+
+    Dry-run still shows the table (previewing an old or foreign plan is genuinely
+    useful, and nothing is deleted either way) -- it just says so first.
+    """
+    blocks = []
+
+    stale_plan = plan_objections(plan, args.max_plan_age_hours)
+    if stale_plan:
+        blocks.append(("refusing to execute this plan:", stale_plan, None))
+
+    if not (live_paths or live_names or args.assume_no_live_sessions):
+        blocks.append(("refusing to execute without liveness data.", [],
+                       "Re-check what is running right now and pass --live-paths-file "
+                       "/ --live-names-file, or state explicitly that you checked with "
+                       "--assume-no-live-sessions."))
+    elif not args.assume_no_live_sessions:
+        # --assume-no-live-sessions is the human saying "I looked, just now". It is
+        # the deliberate override, so freshness is only demanded of files.
+        stale_liveness = liveness_objections(
+            [("--live-paths-file", args.live_paths_file),
+             ("--live-names-file", args.live_names_file)],
+            plan, live_paths, live_names, args.liveness_max_age)
+        if stale_liveness:
+            blocks.append(("refusing to execute on stale liveness data:", stale_liveness,
+                           "Re-collect what is running right now, or state that you "
+                           "checked with --assume-no-live-sessions."))
+    return blocks
+
+
+def print_admission(blocks, stream):
+    for heading, reasons, trailer in blocks:
+        print(heading, file=stream)
+        for reason in reasons:
+            print(f"  - {reason}", file=stream)
+        if trailer:
+            print(trailer, file=stream)
+
+
+def print_admission_warning(blocks):
+    """The dry-run banner: the same gates, the same reasons, printed as a warning.
+
+    On stdout rather than stderr, and above the table rather than after it, because
+    stdout is what a caller captures and quotes, and a caveat printed underneath a
+    "Would remove: 3" line has already been read as a plan.
+    """
+    print("⚠️  THIS PLAN WOULD BE REFUSED AT EXECUTE TIME.")
+    print("    Re-running this with --execute would delete nothing and exit 2:")
+    for heading, reasons, trailer in blocks:
+        print(f"      {heading}")
+        for reason in reasons:
+            print(f"        - {reason}")
+        if trailer:
+            print(f"      {trailer}")
+    print("    The table below is what the plan asks for, not what --execute would do.")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -313,35 +379,14 @@ def main():
     live_paths = read_lines(args.live_paths_file)
     live_names = read_lines(args.live_names_file)
 
-    if args.execute:
-        stale_plan = plan_objections(plan, args.max_plan_age_hours)
-        if stale_plan:
-            print("refusing to execute this plan:", file=sys.stderr)
-            for reason in stale_plan:
-                print(f"  - {reason}", file=sys.stderr)
+    blocks = admission_blocks(plan, live_paths, live_names, args)
+    if blocks:
+        if args.execute:
+            # Only the first block, as before. The gates are ordered, and dumping all
+            # of them at a refusal buries the one that has to be fixed first.
+            print_admission(blocks[:1], sys.stderr)
             return 2
-
-        if not (live_paths or live_names or args.assume_no_live_sessions):
-            print("refusing to execute without liveness data. Re-check what is running "
-                  "right now and pass --live-paths-file / --live-names-file, or state "
-                  "explicitly that you checked with --assume-no-live-sessions.",
-                  file=sys.stderr)
-            return 2
-
-        # --assume-no-live-sessions is the human saying "I looked, just now". It is
-        # the deliberate override, so freshness is only demanded of files.
-        if not args.assume_no_live_sessions:
-            stale_liveness = liveness_objections(
-                [("--live-paths-file", args.live_paths_file),
-                 ("--live-names-file", args.live_names_file)],
-                plan, live_paths, live_names, args.liveness_max_age)
-            if stale_liveness:
-                print("refusing to execute on stale liveness data:", file=sys.stderr)
-                for reason in stale_liveness:
-                    print(f"  - {reason}", file=sys.stderr)
-                print("Re-collect what is running right now, or state that you checked "
-                      "with --assume-no-live-sessions.", file=sys.stderr)
-                return 2
+        print_admission_warning(blocks)
 
     targets = [w for w in plan["worktrees"] if w["verdict"] in args.include]
     if args.only:
@@ -431,7 +476,11 @@ def main():
             print(f"  ✗ {entry['path']}: {note}")
 
     if not args.execute:
-        print("\n(dry run — nothing was deleted; re-run with --execute)")
+        if blocks:
+            print("\n(dry run — nothing was deleted, and --execute would refuse this "
+                  "plan outright; see the warning above)")
+        else:
+            print("\n(dry run — nothing was deleted; re-run with --execute)")
 
     if failed:
         return 1

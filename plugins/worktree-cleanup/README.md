@@ -64,13 +64,14 @@ Both are Python 3 stdlib only, no dependencies.
 bash tests/regression.sh
 ```
 
-110 assertions over a throwaway two-repo fixture covering every risk class:
+124 assertions over a throwaway two-repo fixture covering every risk class:
 classification, ignored data held back while build output is not, the refusal to act
 without liveness data, the happy path, four race conditions injected between scan and
 removal (each asserting *which* gate caught it, not merely that something did), stale
-and foreign plans, liveness files that are stale, copied, dated into the future (both
-the boundary the tolerance shrinks to and the ceiling it can never grow past), or
-dated with an out-of-range `--liveness-max-age` (rejected by argparse, not silently
+and foreign plans, dry-run warning that a plan would be refused at execute time (and
+staying silent for an admissible one), liveness files that are stale, copied, dated
+into the future (both the boundary the tolerance shrinks to and the ceiling it can
+never grow past), or dated with an out-of-range `--liveness-max-age` (rejected by argparse, not silently
 clamped), both branch-handling paths, both branches of the `rmtree` fallback, a prune
 whose confirming `git worktree list` fails, the refusal of any `--allow-dirty` /
 `--allow-untracked` override on both scripts, an older plan (carrying the retired

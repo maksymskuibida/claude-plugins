@@ -152,6 +152,14 @@ Dry-run is the default. Nothing is deleted without `--execute`. Exit codes: `0`
 removed something, `1` a removal failed, `2` refused to start, `3` everything was
 held back on re-check.
 
+**Dry-run checks the same admission gates and says so.** A plan that is too old, from
+another machine, or paired with missing or stale liveness data prints a
+`THIS PLAN WOULD BE REFUSED AT EXECUTE TIME` banner above the table, listing the same
+reasons `--execute` would give. The table still prints (previewing such a plan is
+useful, and nothing is deleted either way) and the exit code is unchanged — but do not
+show a user a dry-run table carrying that banner as if it were a plan they can
+approve. Fix what it names first, then re-run the preview.
+
 ### 4. Report honestly
 
 Report reclaimed space from what was actually removed, not what was planned. If items
