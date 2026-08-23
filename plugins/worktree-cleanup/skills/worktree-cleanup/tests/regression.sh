@@ -278,6 +278,15 @@ table_line=$(printf '%s' "$out" | grep -n "Would remove:" | cut -d: -f1)
 out=$(python3 $S/remove_worktrees.py "$W/r8b.json" --include safe 2>/dev/null)
 has "dry-run warns about missing liveness" "$out" "refusing to execute without liveness data"
 
+# 2b. --execute's stderr for the missing-liveness gate is one sentence in one line,
+# exactly as it was before this file grew a dry-run banner. A substring check (as
+# above) is blind to a heading/trailer that got split across two print() calls --
+# that is exactly the defect that shipped here once and slipped past this suite.
+execerr=$(python3 $S/remove_worktrees.py "$W/r8b.json" --include safe --execute 2>&1 >/dev/null)
+chk "execute missing-liveness stderr is byte-exact" "$execerr" \
+  "refusing to execute without liveness data. Re-check what is running right now and pass --live-paths-file / --live-names-file, or state explicitly that you checked with --assume-no-live-sessions."
+chk "execute missing-liveness stderr is a single line" "$(printf '%s' "$execerr" | wc -l | tr -d ' ')" "0"
+
 # 3. an admissible plan gets no banner at all: the warning must mean something.
 out=$(python3 $S/remove_worktrees.py "$W/r8b.json" --include safe \
         --assume-no-live-sessions 2>/dev/null)

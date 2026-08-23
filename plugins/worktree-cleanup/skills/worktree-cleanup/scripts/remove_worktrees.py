@@ -282,10 +282,13 @@ def admission_blocks(plan, live_paths, live_names, args):
         blocks.append(("refusing to execute this plan:", stale_plan, None))
 
     if not (live_paths or live_names or args.assume_no_live_sessions):
-        blocks.append(("refusing to execute without liveness data.", [],
-                       "Re-check what is running right now and pass --live-paths-file "
-                       "/ --live-names-file, or state explicitly that you checked with "
-                       "--assume-no-live-sessions."))
+        # Heading and trailer are one sentence, in one block with no reasons, so this
+        # must stay a single string -- print_admission puts headings and trailers on
+        # separate lines, and --execute's stderr for this gate has always been one line.
+        blocks.append(("refusing to execute without liveness data. Re-check what is "
+                       "running right now and pass --live-paths-file / "
+                       "--live-names-file, or state explicitly that you checked with "
+                       "--assume-no-live-sessions.", [], None))
     elif not args.assume_no_live_sessions:
         # --assume-no-live-sessions is the human saying "I looked, just now". It is
         # the deliberate override, so freshness is only demanded of files.
