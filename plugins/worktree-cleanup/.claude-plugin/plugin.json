@@ -1,7 +1,7 @@
 {
   "name": "worktree-cleanup",
   "displayName": "Worktree Cleanup",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Find and remove orphaned git worktrees across many repos, gated on unpushed work and live sessions.",
   "author": { "name": "Maksym Skuibida" }
 }

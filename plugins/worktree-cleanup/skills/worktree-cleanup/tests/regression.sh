@@ -182,6 +182,7 @@ chk "3 min ahead, default max-age 5: accepted" "$rc" "0"
 
 fresh
 scan --live-paths-file "$W/live-scan.txt" --json "$W/r7e.json"
+echo "/nonexistent/other" > "$W/live-near-future.txt"
 python3 -c "import os,time;os.utime('$W/live-near-future.txt',(time.time()+180,)*2)"
 out=$(python3 $S/remove_worktrees.py "$W/r7e.json" --include safe --execute \
         --liveness-max-age 1 --live-paths-file "$W/live-near-future.txt" 2>&1); rc=$?
@@ -189,6 +190,37 @@ chk "same file, --liveness-max-age 1: exit" "$rc" "2"
 has "same file, --liveness-max-age 1: why" "$out" "future mtime"
 [ -d "$T/wt-feature-done" ] && ok "same file, --liveness-max-age 1: nothing deleted" \
                             || bad "same file, --liveness-max-age 1: nothing deleted"
+
+# The ceiling half of the clamp: min(FUTURE_MTIME_TOLERANCE_MINUTES, max_age_minutes)
+# must never let the forward slack grow past FUTURE_MTIME_TOLERANCE_MINUTES, even
+# when --liveness-max-age is raised well above it. Without this the clamp would only
+# ever be proven to shrink the slack, never to cap it.
+fresh
+scan --live-paths-file "$W/live-scan.txt" --json "$W/r7f.json"
+echo "/nonexistent/other" > "$W/live-far-future.txt"
+python3 -c "import os,time;os.utime('$W/live-far-future.txt',(time.time()+1800,)*2)"
+out=$(python3 $S/remove_worktrees.py "$W/r7f.json" --include safe --execute \
+        --liveness-max-age 60 --live-paths-file "$W/live-far-future.txt" 2>&1); rc=$?
+chk "30 min ahead, --liveness-max-age 60: exit" "$rc" "2"
+has "30 min ahead, --liveness-max-age 60: why" "$out" "future mtime"
+[ -d "$T/wt-feature-done" ] && ok "30 min ahead, --liveness-max-age 60: nothing deleted" \
+                            || bad "30 min ahead, --liveness-max-age 60: nothing deleted"
+
+echo "== 7g. --liveness-max-age below 1 is rejected, not silently clamped =="
+# A value < 1 sends future_slack to zero or negative, which used to reject an
+# ordinary past-mtime file with "has a future mtime (-0 min ahead of now)" -- a bad
+# flag value should be told, not guessed at.
+fresh
+scan --live-paths-file "$W/live-scan.txt" --json "$W/r7g.json"
+echo "/nonexistent/other" > "$W/live-fresh-g.txt"
+out=$(python3 $S/remove_worktrees.py "$W/r7g.json" --include safe --execute \
+        --liveness-max-age -1 --live-paths-file "$W/live-fresh-g.txt" 2>&1); rc=$?
+chk "--liveness-max-age -1: exit" "$rc" "2"
+has "--liveness-max-age -1: rejected by argparse, not clamped" "$out" "must be at least 1"
+out=$(python3 $S/remove_worktrees.py "$W/r7g.json" --include safe --execute \
+        --liveness-max-age 0 --live-paths-file "$W/live-fresh-g.txt" 2>&1); rc=$?
+chk "--liveness-max-age 0: exit" "$rc" "2"
+has "--liveness-max-age 0: rejected by argparse, not clamped" "$out" "must be at least 1"
 
 fresh
 scan --live-paths-file "$W/live-scan.txt" --json "$W/r7b.json"
@@ -303,6 +335,9 @@ scan --assume-no-live-sessions --json "$W/r10.json"
 out=$(python3 $S/remove_worktrees.py "$W/r10.json" --include review \
         --assume-no-live-sessions --allow-untracked 2>&1); rc=$?
 chk "remover rejects --allow-untracked" "$rc" "2"
+out=$(python3 $S/remove_worktrees.py "$W/r10.json" --include review \
+        --assume-no-live-sessions --allow-dirty 2>&1); rc=$?
+chk "remover rejects --allow-dirty" "$rc" "2"
 
 # The plan no longer carries a policy the remover could adopt without being told.
 chk "plan carries no allow_* policy" "$(python3 -c "
@@ -335,6 +370,47 @@ has "protective reason survives"             "$(r10c r)" "uncommitted change(s) 
 has "ignored-data reason survives alongside" "$(r10c r)" "git-ignored file(s) not recognised as build output"
 has "and names the file"                     "$(r10c r)" ".env"
 
+echo "== 10d. an older plan (allow_* keys, a review-verdict untracked worktree) degrades safely =="
+# Plans written by the version on main carried allow_dirty / allow_untracked, and
+# that version would have written wt-untracked as `review` under --allow-untracked.
+# The remover must not crash reading such a plan, and re-verification -- which does
+# not read allow_* at all any more -- must hold wt-untracked back as protected
+# rather than trusting the stale verdict baked into the plan.
+fresh
+scan --assume-no-live-sessions --json "$W/r10d.json"
+python3 - "$W/r10d.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+plan = json.load(open(path))
+plan["allow_dirty"] = True
+plan["allow_untracked"] = True
+for w in plan["worktrees"]:
+    if w["path"].endswith("/wt-untracked"):
+        w["verdict"] = "review"
+json.dump(plan, open(path, "w"))
+PY
+out=$(python3 $S/remove_worktrees.py "$W/r10d.json" --include review \
+        --assume-no-live-sessions --only "$T/wt-untracked" --execute 2>&1); rc=$?
+chk "old plan with allow_* keys does not crash the remover" "$rc" "3"
+has "wt-untracked held back on re-check" "$out" "wt-untracked"
+has "held back as protected, not trusted as review" "$out" "now protected"
+[ -d "$T/wt-untracked" ] && ok "wt-untracked survives" || bad "wt-untracked survives"
+
+echo "== 10e. a missing or malformed plan file is refused cleanly, not with a traceback =="
+# Every other refusal path in remove_worktrees.py prints a clean message to stderr
+# and returns 2. Opening and json.load-ing the plan used to have no error handling
+# at all, so a missing plan gave a raw FileNotFoundError traceback and a malformed
+# one a raw json.decoder.JSONDecodeError traceback.
+out=$(python3 $S/remove_worktrees.py "$W/does-not-exist.json" --assume-no-live-sessions 2>&1); rc=$?
+chk "nonexistent plan path: exit" "$rc" "2"
+has "nonexistent plan path: clean message" "$out" "not found"
+chk "nonexistent plan path: no traceback" "$(echo "$out" | grep -c Traceback)" "0"
+
+echo "not json" > "$W/bad-plan.json"
+out=$(python3 $S/remove_worktrees.py "$W/bad-plan.json" --assume-no-live-sessions 2>&1); rc=$?
+chk "malformed JSON plan: exit" "$rc" "2"
+has "malformed JSON plan: clean message" "$out" "not valid JSON"
+chk "malformed JSON plan: no traceback" "$(echo "$out" | grep -c Traceback)" "0"
 
 echo "== 11. a repo sitting at exactly --maxdepth is found =="
 mkdir -p "$W/deep/a/b"; ( cd "$W/deep/a/b" && /usr/bin/git init -q r && cd r && \

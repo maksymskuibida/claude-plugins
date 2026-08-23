@@ -40,6 +40,25 @@ from scan_worktrees import (  # noqa: E402
 FUTURE_MTIME_TOLERANCE_MINUTES = 5.0
 
 
+def positive_minutes(value):
+    """argparse type= for --liveness-max-age: reject anything below 1 minute.
+
+    A value < 1 makes ``future_slack`` (``min(FUTURE_MTIME_TOLERANCE_MINUTES,
+    max_age_minutes)``) zero or negative, which then rejects an ordinary *past*
+    mtime file with the nonsensical message "has a future mtime (-0 min ahead of
+    now)". A bad flag value should be told, not silently clamped into something
+    that behaves unpredictably.
+    """
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not an integer")
+    if n < 1:
+        raise argparse.ArgumentTypeError(
+            f"--liveness-max-age must be at least 1 (got {n})")
+    return n
+
+
 def liveness_objections(files, plan, live_paths, live_names, max_age_minutes):
     """Reasons the supplied liveness data is not evidence about *now*. Empty = fresh.
 
@@ -64,6 +83,7 @@ def liveness_objections(files, plan, live_paths, live_names, max_age_minutes):
     objections = []
     scanned_at = plan.get("scanned_at", 0.0)
     consumed = {plan.get("live_paths_file", ""), plan.get("live_names_file", "")} - {""}
+    future_slack = min(FUTURE_MTIME_TOLERANCE_MINUTES, max_age_minutes)
 
     for label, path in files:
         if not path:
@@ -79,7 +99,6 @@ def liveness_objections(files, plan, live_paths, live_names, max_age_minutes):
             objections.append(f"{label} {path} cannot be read: {exc}")
             continue
         skew = (written - time.time()) / 60.0
-        future_slack = min(FUTURE_MTIME_TOLERANCE_MINUTES, max_age_minutes)
         if skew > future_slack:
             objections.append(f"{label} {path} has a future mtime ({skew:.0f} min ahead "
                               "of now), which is not evidence collected just now -- it "
@@ -261,17 +280,27 @@ def main():
                          "the leftover from blocking a later `git worktree add`")
     ap.add_argument("--active-within", type=int, default=None,
                     help="override the scan's idle threshold, in minutes")
-    ap.add_argument("--liveness-max-age", type=int, default=5,
-                    help="how many minutes old the liveness files may be (default: 5). "
-                         "They must also have been written after the scan ran.")
+    ap.add_argument("--liveness-max-age", type=positive_minutes, default=5,
+                    help="how many minutes old the liveness files may be (default: 5, "
+                         "minimum: 1). They must also have been written after the scan ran.")
     ap.add_argument("--max-plan-age-hours", type=float, default=24.0,
                     help="refuse a plan older than this many hours (default: 24)")
     ap.add_argument("--execute", action="store_true",
                     help="actually remove; without this nothing is deleted")
     args = ap.parse_args()
 
-    with open(os.path.expanduser(args.plan)) as fh:
-        plan = json.load(fh)
+    try:
+        with open(os.path.expanduser(args.plan)) as fh:
+            plan = json.load(fh)
+    except FileNotFoundError:
+        print(f"plan file not found: {args.plan}", file=sys.stderr)
+        return 2
+    except json.JSONDecodeError as exc:
+        print(f"plan file is not valid JSON: {args.plan} ({exc})", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"could not read plan file {args.plan}: {exc}", file=sys.stderr)
+        return 2
 
     active_within = (args.active_within if args.active_within is not None
                      else plan.get("active_within", 120))

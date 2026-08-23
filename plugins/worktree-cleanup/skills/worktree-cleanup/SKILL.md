@@ -103,7 +103,7 @@ Verdicts:
 |---|---|
 | `stale` | Registration whose directory is already gone. Prune freely; there is nothing to lose. |
 | `safe` | Clean, published, and nothing suggests it is in use. |
-| `review` | Recoverable, but something wants a human eye — ignored files that are not build output, untracked files, unpushed commits on the branch, or no liveness data. |
+| `review` | Recoverable, but something wants a human eye — ignored files that are not build output, commits ahead of this branch's own upstream (but reachable via a different remote ref), or no liveness data. |
 | `protected` | Would destroy work or break a live session. |
 | `main` | The repo's own checkout. Never a candidate. |
 
@@ -168,6 +168,12 @@ two overstates the result.
   included item is still re-verified, so this widens scope without weakening checks.
 - `--only PATH...` — restrict to specific worktrees, for when the user picks from the
   list rather than approving a class.
+- `--delete-branch` — also delete the branch each removed worktree held, instead of
+  leaving it orphaned.
+- `--liveness-max-age N` (remover) — how many minutes old the liveness files may be,
+  default 5. They must also post-date the scan, and the same number also caps how far
+  into the *future* a liveness file's mtime may sit before it is refused outright.
+- `--max-plan-age-hours N` (remover) — refuse a plan older than this, default 24.
 
 There is no flag for uncommitted or untracked work, and adding one would be a
 mistake. A worktree with modified tracked files or untracked files is `protected`,
@@ -175,11 +181,6 @@ full stop. Nothing here can tell `node_modules` from the only copy of a migratio
 script, so the tool does not try: report the worktree, name what is in it, and ask
 the user to commit, stash or clean it and re-scan. Every deletion this tool performs
 stays recoverable from a remote, and that is only true because of this rule.
-- `--delete-branch` — also delete the branch each removed worktree held, instead of
-  leaving it orphaned.
-- `--liveness-max-age N` (remover) — how many minutes old the liveness files may be,
-  default 5. They must also post-date the scan.
-- `--max-plan-age-hours N` (remover) — refuse a plan older than this, default 24.
 
 ## Things that will bite you
 

@@ -402,8 +402,8 @@ def classify(wt: Worktree, have_liveness=True, active_within=120):
         # so recognisable build output is subtracted first (see BUILD_OUTPUT_DIRS)
         # and only what is left, which is data, gets a human's attention.
         soft.append(f"{wt.ignored_count} git-ignored file(s) not recognised as build "
-                    f"output — deleted permanently and recoverable from nowhere: "
-                    f"{shown}{more}")
+                    f"output — would be deleted permanently and recoverable from "
+                    f"nowhere: {shown}{more}")
 
     if not wt.on_remote:
         where = "detached HEAD" if wt.detached else f"branch {wt.branch}"
