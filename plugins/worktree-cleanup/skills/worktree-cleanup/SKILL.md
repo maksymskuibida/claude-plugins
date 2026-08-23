@@ -162,17 +162,19 @@ two overstates the result.
 
 ## Useful flags
 
-- `--allow-untracked` — treat worktrees whose only changes are untracked files as
-  `review` rather than `protected`. Most such files are `node_modules`, `.DS_Store`,
-  and coverage output. It never weakens protection for modified tracked files.
 - `--active-within N` — minutes of idleness required before a worktree is considered
   unused (default 120). Lower it on a quiet machine; raise it when many agents run.
-- `--allow-dirty` — stop protecting worktrees for having uncommitted changes. Rarely
-  correct; it disables the gate that protects unsaved work.
 - `--include review stale` on the remover — act on more than just `safe`. Every
   included item is still re-verified, so this widens scope without weakening checks.
 - `--only PATH...` — restrict to specific worktrees, for when the user picks from the
   list rather than approving a class.
+
+There is no flag for uncommitted or untracked work, and adding one would be a
+mistake. A worktree with modified tracked files or untracked files is `protected`,
+full stop. Nothing here can tell `node_modules` from the only copy of a migration
+script, so the tool does not try: report the worktree, name what is in it, and ask
+the user to commit, stash or clean it and re-scan. Every deletion this tool performs
+stays recoverable from a remote, and that is only true because of this rule.
 - `--delete-branch` — also delete the branch each removed worktree held, instead of
   leaving it orphaned.
 - `--liveness-max-age N` (remover) — how many minutes old the liveness files may be,

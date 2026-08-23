@@ -164,6 +164,32 @@ chk "future-mtime liveness file: exit" "$rc" "2"
 has "future-mtime liveness file: why" "$out" "future mtime"
 [ -d "$T/wt-feature-done" ] && ok "future-mtime liveness file: nothing deleted" || bad "future-mtime liveness file: nothing deleted"
 
+# The tolerance is a ceiling, not a fixed grant: the effective future slack is
+# min(FUTURE_MTIME_TOLERANCE_MINUTES, --liveness-max-age). A three-minute-ahead
+# file is inside the default five, but a user who tightens --liveness-max-age to
+# 1 has said one minute is the most staleness they accept -- and used to get five
+# minutes of *forward* slack anyway, a window wider than the backward one they
+# just narrowed.
+fresh
+scan --live-paths-file "$W/live-scan.txt" --json "$W/r7d.json"
+echo "/nonexistent/other" > "$W/live-near-future.txt"
+python3 -c "import os,time;os.utime('$W/live-near-future.txt',(time.time()+180,)*2)"
+out=$(python3 $S/remove_worktrees.py "$W/r7d.json" --include safe --execute \
+        --live-paths-file "$W/live-near-future.txt" 2>&1); rc=$?
+chk "3 min ahead, default max-age 5: accepted" "$rc" "0"
+[ -d "$T/wt-feature-done" ] && bad "3 min ahead, default max-age 5: removal proceeds" \
+                            || ok  "3 min ahead, default max-age 5: removal proceeds"
+
+fresh
+scan --live-paths-file "$W/live-scan.txt" --json "$W/r7e.json"
+python3 -c "import os,time;os.utime('$W/live-near-future.txt',(time.time()+180,)*2)"
+out=$(python3 $S/remove_worktrees.py "$W/r7e.json" --include safe --execute \
+        --liveness-max-age 1 --live-paths-file "$W/live-near-future.txt" 2>&1); rc=$?
+chk "same file, --liveness-max-age 1: exit" "$rc" "2"
+has "same file, --liveness-max-age 1: why" "$out" "future mtime"
+[ -d "$T/wt-feature-done" ] && ok "same file, --liveness-max-age 1: nothing deleted" \
+                            || bad "same file, --liveness-max-age 1: nothing deleted"
+
 fresh
 scan --live-paths-file "$W/live-scan.txt" --json "$W/r7b.json"
 python3 $S/remove_worktrees.py "$W/r7b.json" --include safe --assume-no-live-sessions --execute >/dev/null 2>&1
@@ -224,6 +250,28 @@ has "rmtree failure is reported, not swallowed" "$out" "rmtree failed"
 [ -d "$T/wt-bugfix-shipped" ] && ok "rmtree failure leaves the target in place" || bad "rmtree failure leaves the target in place"
 [ -L "$T/wt-symlink" ] && ok "rmtree failure leaves the symlink in place" || bad "rmtree failure leaves the symlink in place"
 
+echo "== 9b. a prune we cannot confirm is a failure, not a success =="
+# `git worktree prune` is repo-wide and says nothing about what it did; re-listing
+# is the only proof. When the listing itself fails, an unchecked exit code parsed
+# as an empty registration set and every stale entry reported "pruned" regardless.
+mkdir -p "$W/shim-list"
+cat > "$W/shim-list/git" <<'SHIM'
+#!/bin/sh
+if [ "$1" = "worktree" ] && [ "$2" = "list" ]; then
+  echo "fatal: not a git repository" >&2
+  exit 128
+fi
+exec /usr/bin/git "$@"
+SHIM
+chmod +x "$W/shim-list/git"
+fresh
+scan --assume-no-live-sessions --json "$W/r9b.json"
+out=$(PATH="$W/shim-list:$PATH" python3 $S/remove_worktrees.py "$W/r9b.json" --include stale \
+        --assume-no-live-sessions --only "$T/wt-vanished" --execute 2>&1)
+has "unconfirmable prune names the exit code" "$out" "could not confirm prune: git worktree list exited 128"
+has "unconfirmable prune counted as failed"   "$out" "Failed: 1"
+has "and not reported as removed"             "$out" "Removed: 0"
+
 echo "== 10. units that a fixture cannot reach =="
 out=$(python3 -c "
 import sys; sys.path.insert(0, '$S')
@@ -238,14 +286,55 @@ chk "agent name unit-a-4f21 does match"                     "$(echo "$out" | sed
 chk "nested node_modules recognised as build output"        "$(echo "$out" | sed -n 3p)" "nested"
 chk "an ignored sqlite file is data, not build output"      "$(echo "$out" | sed -n 4p)" "data"
 
+echo "== 10b. uncommitted work is disallowed, not flag-overridable =="
+# --allow-dirty and --allow-untracked used to exist on both scripts, and
+# --allow-untracked was additionally carried out of the plan into the remover's own
+# policy while --allow-dirty was not. Both are gone: nothing here can tell
+# node_modules from the only copy of a migration, so the tool reports and the human
+# resolves. These assert the flags are *rejected*, not silently ignored.
 fresh
-scan --assume-no-live-sessions --allow-untracked --json "$W/r10.json"
-chk "--allow-untracked downgrades to review" "$(python3 -c "
+out=$(python3 $S/scan_worktrees.py --roots "$T" --maxdepth 2 --quiet \
+        --assume-no-live-sessions --allow-untracked --json "$W/r10.json" 2>&1); rc=$?
+chk "scan rejects --allow-untracked" "$rc" "2"
+out=$(python3 $S/scan_worktrees.py --roots "$T" --maxdepth 2 --quiet \
+        --assume-no-live-sessions --allow-dirty --json "$W/r10.json" 2>&1); rc=$?
+chk "scan rejects --allow-dirty" "$rc" "2"
+scan --assume-no-live-sessions --json "$W/r10.json"
+out=$(python3 $S/remove_worktrees.py "$W/r10.json" --include review \
+        --assume-no-live-sessions --allow-untracked 2>&1); rc=$?
+chk "remover rejects --allow-untracked" "$rc" "2"
+
+# The plan no longer carries a policy the remover could adopt without being told.
+chk "plan carries no allow_* policy" "$(python3 -c "
 import json;d=json.load(open('$W/r10.json'))
-print(next(w['verdict'] for w in d['worktrees'] if w['path'].endswith('/wt-untracked')))")" "review"
-chk "--allow-untracked does not touch dirty tracked files" "$(python3 -c "
+print(sum(1 for k in d if k.startswith('allow_')))")" "0"
+
+rsn() { python3 -c "
 import json;d=json.load(open('$W/r10.json'))
-print(next(w['verdict'] for w in d['worktrees'] if w['path'].endswith('/wt-hotfix')))")" "protected"
+print(' | '.join(next(w['reasons'] for w in d['worktrees'] if w['path'].endswith('/$1'))))"; }
+chk "untracked-only stays protected" "$(python3 -c "
+import json;d=json.load(open('$W/r10.json'))
+print(next(w['verdict'] for w in d['worktrees'] if w['path'].endswith('/wt-untracked')))")" "protected"
+has "untracked reason says what to resolve" "$(rsn wt-untracked)" "then re-scan"
+has "dirty reason says what to resolve"     "$(rsn wt-hotfix)"    "commit, stash or discard"
+
+echo "== 10c. a protected worktree still reports its ignored data in reasons =="
+# The table prints this from ignored_count for every verdict, but the JSON `reasons`
+# used to drop it the moment anything protective fired -- so a consumer reading the
+# plan lost the one fact a human needs before approving a deletion here.
+fresh
+echo "DB_PASSWORD=hunter2" > "$T/wt-hotfix/.env"     # ignored data on a *dirty* worktree
+age "$T" wt-hotfix
+scan --assume-no-live-sessions --json "$W/r10c.json"
+r10c() { python3 -c "
+import json;d=json.load(open('$W/r10c.json'))
+w=next(w for w in d['worktrees'] if w['path'].endswith('/wt-hotfix'))
+print(w['verdict'] if '$1' == 'v' else ' | '.join(w['reasons']))"; }
+chk "still protected"                        "$(r10c v)" "protected"
+has "protective reason survives"             "$(r10c r)" "uncommitted change(s) to tracked files"
+has "ignored-data reason survives alongside" "$(r10c r)" "git-ignored file(s) not recognised as build output"
+has "and names the file"                     "$(r10c r)" ".env"
+
 
 echo "== 11. a repo sitting at exactly --maxdepth is found =="
 mkdir -p "$W/deep/a/b"; ( cd "$W/deep/a/b" && /usr/bin/git init -q r && cd r && \

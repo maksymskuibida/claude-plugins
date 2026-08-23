@@ -32,9 +32,11 @@ from scan_worktrees import (  # noqa: E402
 # timestamps, a host whose clock is a few minutes fast -- is real and should not
 # trip this. But "age" below is computed as (now - written), so a future mtime
 # makes it *negative*, which is smaller than every max-age threshold and would
-# sail through the "too old" check that exists right next to it. Five minutes
-# matches the default --liveness-max-age, so this refuses exactly the skew that
-# staleness checking on the other side already treats as material.
+# sail through the "too old" check that exists right next to it. This is the
+# *ceiling* on that slack, not the slack itself: the effective tolerance is
+# min(this, --liveness-max-age), so the forward window can never be wider than
+# the backward one. A user who tightens --liveness-max-age to 1 gets one minute
+# of future slack too, and the two sides stay the same size at every flag value.
 FUTURE_MTIME_TOLERANCE_MINUTES = 5.0
 
 
@@ -77,7 +79,8 @@ def liveness_objections(files, plan, live_paths, live_names, max_age_minutes):
             objections.append(f"{label} {path} cannot be read: {exc}")
             continue
         skew = (written - time.time()) / 60.0
-        if skew > FUTURE_MTIME_TOLERANCE_MINUTES:
+        future_slack = min(FUTURE_MTIME_TOLERANCE_MINUTES, max_age_minutes)
+        if skew > future_slack:
             objections.append(f"{label} {path} has a future mtime ({skew:.0f} min ahead "
                               "of now), which is not evidence collected just now -- it "
                               "cannot be aged, so it cannot be trusted")
@@ -123,8 +126,8 @@ def plan_objections(plan, max_age_hours):
     return objections
 
 
-def reverify(entry, live_paths, live_names, allow_dirty, active_within, assume_no_live,
-             allow_untracked, scanned_at=0.0):
+def reverify(entry, live_paths, live_names, active_within, assume_no_live,
+             scanned_at=0.0):
     """Re-derive the verdict from scratch. Returns (verdict, reasons)."""
     wt = Worktree(path=entry["path"], repo=entry["repo"],
                   is_main=entry["is_main"], head=entry["head"],
@@ -166,9 +169,8 @@ def reverify(entry, live_paths, live_names, allow_dirty, active_within, assume_n
             wt.idle_minutes = max(0.0, entry.get("idle_minutes", -1)) + elapsed
 
     wt.live_reason = match_live(wt, live_paths, live_names)
-    classify(wt, protect_dirty=not allow_dirty,
-             have_liveness=bool(live_paths or live_names) or assume_no_live,
-             active_within=active_within, allow_untracked=allow_untracked)
+    classify(wt, have_liveness=bool(live_paths or live_names) or assume_no_live,
+             active_within=active_within)
     return wt.verdict, wt.reasons
 
 
@@ -253,8 +255,6 @@ def main():
                     help="which verdict classes to remove (default: safe)")
     ap.add_argument("--only", nargs="*", default=None,
                     help="restrict to these exact worktree paths")
-    ap.add_argument("--allow-dirty", action="store_true")
-    ap.add_argument("--allow-untracked", action="store_true")
     ap.add_argument("--delete-branch", action="store_true",
                     help="also delete each removed worktree's branch; safe only "
                          "because we verified HEAD is published, and it prevents "
@@ -365,9 +365,8 @@ def main():
                 removed.append((entry, "stale registration pruned (freed no disk)"))
             continue
 
-        verdict, reasons = reverify(entry, live_paths, live_names, args.allow_dirty,
-                                    active_within, args.assume_no_live_sessions,
-                                    args.allow_untracked or plan.get('allow_untracked', False),
+        verdict, reasons = reverify(entry, live_paths, live_names, active_within,
+                                    args.assume_no_live_sessions,
                                     plan.get('scanned_at', 0.0))
         if verdict not in args.include:
             held.append((entry, verdict, reasons))
