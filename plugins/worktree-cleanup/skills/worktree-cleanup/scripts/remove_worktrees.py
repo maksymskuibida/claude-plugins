@@ -32,10 +32,31 @@ from scan_worktrees import (  # noqa: E402
 # timestamps, a host whose clock is a few minutes fast -- is real and should not
 # trip this. But "age" below is computed as (now - written), so a future mtime
 # makes it *negative*, which is smaller than every max-age threshold and would
-# sail through the "too old" check that exists right next to it. Five minutes
-# matches the default --liveness-max-age, so this refuses exactly the skew that
-# staleness checking on the other side already treats as material.
+# sail through the "too old" check that exists right next to it. This is the
+# *ceiling* on that slack, not the slack itself: the effective tolerance is
+# min(this, --liveness-max-age), so the forward window can never be wider than
+# the backward one. A user who tightens --liveness-max-age to 1 gets one minute
+# of future slack too, and the two sides stay the same size at every flag value.
 FUTURE_MTIME_TOLERANCE_MINUTES = 5.0
+
+
+def positive_minutes(value):
+    """argparse type= for --liveness-max-age: reject anything below 1 minute.
+
+    A value < 1 makes ``future_slack`` (``min(FUTURE_MTIME_TOLERANCE_MINUTES,
+    max_age_minutes)``) zero or negative, which then rejects an ordinary *past*
+    mtime file with the nonsensical message "has a future mtime (-0 min ahead of
+    now)". A bad flag value should be told, not silently clamped into something
+    that behaves unpredictably.
+    """
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not an integer")
+    if n < 1:
+        raise argparse.ArgumentTypeError(
+            f"--liveness-max-age must be at least 1 (got {n})")
+    return n
 
 
 def liveness_objections(files, plan, live_paths, live_names, max_age_minutes):
@@ -62,6 +83,7 @@ def liveness_objections(files, plan, live_paths, live_names, max_age_minutes):
     objections = []
     scanned_at = plan.get("scanned_at", 0.0)
     consumed = {plan.get("live_paths_file", ""), plan.get("live_names_file", "")} - {""}
+    future_slack = min(FUTURE_MTIME_TOLERANCE_MINUTES, max_age_minutes)
 
     for label, path in files:
         if not path:
@@ -77,7 +99,7 @@ def liveness_objections(files, plan, live_paths, live_names, max_age_minutes):
             objections.append(f"{label} {path} cannot be read: {exc}")
             continue
         skew = (written - time.time()) / 60.0
-        if skew > FUTURE_MTIME_TOLERANCE_MINUTES:
+        if skew > future_slack:
             objections.append(f"{label} {path} has a future mtime ({skew:.0f} min ahead "
                               "of now), which is not evidence collected just now -- it "
                               "cannot be aged, so it cannot be trusted")
@@ -123,8 +145,8 @@ def plan_objections(plan, max_age_hours):
     return objections
 
 
-def reverify(entry, live_paths, live_names, allow_dirty, active_within, assume_no_live,
-             allow_untracked, scanned_at=0.0):
+def reverify(entry, live_paths, live_names, active_within, assume_no_live,
+             scanned_at=0.0):
     """Re-derive the verdict from scratch. Returns (verdict, reasons)."""
     wt = Worktree(path=entry["path"], repo=entry["repo"],
                   is_main=entry["is_main"], head=entry["head"],
@@ -166,9 +188,8 @@ def reverify(entry, live_paths, live_names, allow_dirty, active_within, assume_n
             wt.idle_minutes = max(0.0, entry.get("idle_minutes", -1)) + elapsed
 
     wt.live_reason = match_live(wt, live_paths, live_names)
-    classify(wt, protect_dirty=not allow_dirty,
-             have_liveness=bool(live_paths or live_names) or assume_no_live,
-             active_within=active_within, allow_untracked=allow_untracked)
+    classify(wt, have_liveness=bool(live_paths or live_names) or assume_no_live,
+             active_within=active_within)
     return wt.verdict, wt.reasons
 
 
@@ -253,25 +274,38 @@ def main():
                     help="which verdict classes to remove (default: safe)")
     ap.add_argument("--only", nargs="*", default=None,
                     help="restrict to these exact worktree paths")
-    ap.add_argument("--allow-dirty", action="store_true")
-    ap.add_argument("--allow-untracked", action="store_true")
     ap.add_argument("--delete-branch", action="store_true",
                     help="also delete each removed worktree's branch; safe only "
                          "because we verified HEAD is published, and it prevents "
                          "the leftover from blocking a later `git worktree add`")
     ap.add_argument("--active-within", type=int, default=None,
                     help="override the scan's idle threshold, in minutes")
-    ap.add_argument("--liveness-max-age", type=int, default=5,
-                    help="how many minutes old the liveness files may be (default: 5). "
-                         "They must also have been written after the scan ran.")
+    ap.add_argument("--liveness-max-age", type=positive_minutes, default=5,
+                    help="how many minutes old the liveness files may be (default: 5, "
+                         "minimum: 1). They must also have been written after the scan ran.")
     ap.add_argument("--max-plan-age-hours", type=float, default=24.0,
                     help="refuse a plan older than this many hours (default: 24)")
     ap.add_argument("--execute", action="store_true",
                     help="actually remove; without this nothing is deleted")
     args = ap.parse_args()
 
-    with open(os.path.expanduser(args.plan)) as fh:
-        plan = json.load(fh)
+    try:
+        with open(os.path.expanduser(args.plan)) as fh:
+            plan = json.load(fh)
+    except FileNotFoundError:
+        print(f"plan file not found: {args.plan}", file=sys.stderr)
+        return 2
+    except json.JSONDecodeError as exc:
+        print(f"plan file is not valid JSON: {args.plan} ({exc})", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"could not read plan file {args.plan}: {exc}", file=sys.stderr)
+        return 2
+
+    if not isinstance(plan, dict) or "worktrees" not in plan:
+        print(f"plan file has an unexpected shape (expected an object with a "
+              f"\"worktrees\" key): {args.plan}", file=sys.stderr)
+        return 2
 
     active_within = (args.active_within if args.active_within is not None
                      else plan.get("active_within", 120))
@@ -365,9 +399,8 @@ def main():
                 removed.append((entry, "stale registration pruned (freed no disk)"))
             continue
 
-        verdict, reasons = reverify(entry, live_paths, live_names, args.allow_dirty,
-                                    active_within, args.assume_no_live_sessions,
-                                    args.allow_untracked or plan.get('allow_untracked', False),
+        verdict, reasons = reverify(entry, live_paths, live_names, active_within,
+                                    args.assume_no_live_sessions,
                                     plan.get('scanned_at', 0.0))
         if verdict not in args.include:
             held.append((entry, verdict, reasons))

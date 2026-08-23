@@ -351,8 +351,18 @@ def match_live(wt: Worktree, live_paths, live_names):
     return ""
 
 
-def classify(wt: Worktree, protect_dirty=True, have_liveness=True, active_within=120,
-             allow_untracked=False):
+def classify(wt: Worktree, have_liveness=True, active_within=120):
+    """Assign a verdict. Uncommitted work is never something this tool resolves.
+
+    There is deliberately no --allow-dirty / --allow-untracked escape hatch. Both
+    used to exist, and both amounted to the tool deciding on a human's behalf that
+    some unsaved work was disposable -- a decision it has no way to make correctly,
+    because "untracked" covers node_modules and the only copy of a migration script
+    equally. A worktree with modified tracked files or untracked files is protected,
+    the reason says what to resolve, and the human commits, stashes or deletes it
+    and re-scans. That keeps every deletion this tool performs recoverable from a
+    remote, which is the property the whole design rests on.
+    """
     reasons, soft = [], []
 
     if not wt.exists:
@@ -373,15 +383,16 @@ def classify(wt: Worktree, protect_dirty=True, have_liveness=True, active_within
 
     if wt.dirty_count < 0:
         reasons.append("could not read git status; treating as unsafe")
-    elif wt.dirty_count > 0 and protect_dirty:
-        reasons.append(f"{wt.dirty_count} uncommitted change(s) to tracked files")
+    elif wt.dirty_count > 0:
+        reasons.append(f"{wt.dirty_count} uncommitted change(s) to tracked files — "
+                       "commit, stash or discard them, then re-scan")
 
-    if wt.untracked_count > 0 and protect_dirty:
-        note = f"{wt.untracked_count} untracked file(s) — build output, or unsaved work"
+    if wt.untracked_count > 0:
         # Untracked files are usually node_modules and .DS_Store, but "usually" is not
-        # a basis for deleting them. Downgrading to review keeps them out of an
-        # automated sweep while still letting someone clear them deliberately.
-        (soft if allow_untracked else reasons).append(note)
+        # a basis for deleting them, and nothing here can tell those apart from the
+        # only copy of something. Resolving it is the human's call, not a flag's.
+        reasons.append(f"{wt.untracked_count} untracked file(s) — build output, or "
+                       "unsaved work; clean or commit them, then re-scan")
 
     if wt.ignored_count > 0:
         shown = ", ".join(wt.ignored_sample[:3])
@@ -391,8 +402,8 @@ def classify(wt: Worktree, protect_dirty=True, have_liveness=True, active_within
         # so recognisable build output is subtracted first (see BUILD_OUTPUT_DIRS)
         # and only what is left, which is data, gets a human's attention.
         soft.append(f"{wt.ignored_count} git-ignored file(s) not recognised as build "
-                    f"output — deleted permanently and recoverable from nowhere: "
-                    f"{shown}{more}")
+                    f"output — would be deleted permanently and recoverable from "
+                    f"nowhere: {shown}{more}")
 
     if not wt.on_remote:
         where = "detached HEAD" if wt.detached else f"branch {wt.branch}"
@@ -400,7 +411,12 @@ def classify(wt: Worktree, protect_dirty=True, have_liveness=True, active_within
 
     if reasons:
         wt.verdict = PROTECTED
-        wt.reasons = reasons
+        # Soft reasons ride along rather than being dropped. They are facts about
+        # this worktree, not a verdict -- and the ignored-data one especially is
+        # the thing a human needs before approving any deletion here. The table
+        # prints it from ignored_count either way, but a consumer reading
+        # `reasons` straight out of the plan JSON used to lose it entirely.
+        wt.reasons = reasons + soft
         return wt
 
     # Prefer the remote ref matching this worktree's own branch; when several refs
@@ -459,11 +475,6 @@ def main():
     ap.add_argument("--assume-no-live-sessions", action="store_true",
                     help="assert that you checked and nothing is running; without this "
                          "or a liveness file, nothing is ever classified safe")
-    ap.add_argument("--allow-dirty", action="store_true",
-                    help="do not protect worktrees solely because they have uncommitted changes")
-    ap.add_argument("--allow-untracked", action="store_true",
-                    help="treat untracked-only worktrees as review rather than protected "
-                         "(build output and .DS_Store rather than lost work)")
     ap.add_argument("--active-within", type=int, default=120,
                     help="protect worktrees touched within this many minutes (default: 120)")
     ap.add_argument("--json", help="write the full classified plan here")
@@ -489,8 +500,7 @@ def main():
     have_liveness = bool(live_paths or live_names) or args.assume_no_live_sessions
     for wt in worktrees:
         wt.live_reason = match_live(wt, live_paths, live_names)
-        classify(wt, protect_dirty=not args.allow_dirty, have_liveness=have_liveness,
-                 active_within=args.active_within, allow_untracked=args.allow_untracked)
+        classify(wt, have_liveness=have_liveness, active_within=args.active_within)
 
     order = {STALE: 0, SAFE: 1, REVIEW: 2, PROTECTED: 3, MAIN: 4}
     worktrees.sort(key=lambda w: (order[w.verdict], -w.size_kb))
@@ -538,8 +548,6 @@ def main():
             "scanned_at": time.time(),
             "active_within": args.active_within,
             "assume_no_live_sessions": args.assume_no_live_sessions,
-            "allow_dirty": args.allow_dirty,
-            "allow_untracked": args.allow_untracked,
             "hostname": socket.gethostname(),
             # The remover needs these to tell fresh liveness data from the very
             # file this scan already consumed.
