@@ -4,13 +4,16 @@
 # output, because a report claiming a worktree was preserved proves nothing.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 S="$HERE/../scripts"
-W="${TMPDIR:-/tmp}/wtc-tests"
-# Start from nothing. $W used to survive between runs while plans were written to
-# fixed names, so a scan that crashed left the previous run's plan in place and the
-# assertions read that instead -- a green suite proving nothing about this revision.
-chmod -R u+rwX "$W" 2>/dev/null
-rm -rf "$W"
-mkdir -p "$W"
+# Start from nothing, in a root unique to this run. mktemp -d guarantees both: an
+# empty directory (a scan that crashed in a previous run cannot leave a stale plan
+# for the assertions to read -- a green suite proving nothing about this revision)
+# and one no concurrent run shares (two suites on a fixed $W clobbered each other's
+# fixture and failed spuriously).
+W="$(mktemp -d "${TMPDIR:-/tmp}/wtc-tests.XXXXXX")"
+# Everything below rm -rf's $W, so refuse to run at all unless mktemp handed us a
+# real absolute path under the temp dir it was asked for.
+case "$W" in "${TMPDIR:-/tmp}"/wtc-tests.??????*) ;;
+  *) echo "refusing to run: bad fixture root '$W'" >&2; exit 1 ;; esac
 T=$W/regress
 PASS=0; FAIL=0
 
@@ -438,5 +441,5 @@ print(len(find_repos(['$W/deep'], 3)))")" "1"
 echo ""
 echo "======================================"
 echo "  PASS: $PASS   FAIL: $FAIL"
-chmod -R u+rwX "$T" 2>/dev/null; rm -rf "$T" "$S/__pycache__"
+chmod -R u+rwX "$W" 2>/dev/null; rm -rf "$W" "$S/__pycache__"
 [ $FAIL -eq 0 ] || exit 1
