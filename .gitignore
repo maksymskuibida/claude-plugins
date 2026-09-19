@@ -3,3 +3,5 @@
 .idea/
 __pycache__/
 *.pyc
+# claude plugin eval output
+plugins/*/evals/results/

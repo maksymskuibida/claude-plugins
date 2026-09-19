@@ -9,6 +9,8 @@
   {"query": "under 120 words is too tight when you're explaining an actual architecture decision. loosen the length rule but don't let it turn into essays again", "should_trigger": true},
   {"query": "the reviewer agent came back saying approved but its notes list two unresolved blockers, and you reported it as done. how should you have written that turn instead", "should_trigger": true},
   {"query": "for a plain 'what does this env var do' question do you still need the Done/Next headers? feels like overkill but i'd rather you be consistent", "should_trigger": true},
+  {"query": "you sent me a full needs-you/done/next report after every single background agent finished and now i have to scroll through twelve of them to work out where we ended up. stop doing that — one report at the end", "should_trigger": true},
+  {"query": "your wrap-up says 'the two doubts i raised earlier' and a bare !242 — i have no idea what either of those is without scrolling. how are these summaries supposed to be written", "should_trigger": true},
   {"query": "the /users endpoint returns snake_case but the frontend expects camelCase. change the response format in app/api/serializers.py and update the openapi spec", "should_trigger": false},
   {"query": "prettier keeps reformatting my jsx onto one line and it's unreadable. what do i put in .prettierrc to stop it", "should_trigger": false},
   {"query": "write the PR description for this branch — we follow the conventional-commits style and there's a template in .github/pull_request_template.md", "should_trigger": false},
@@ -18,5 +20,7 @@
   {"query": "the dates in this csv are MM/DD/YYYY and pandas is reading them as strings — what's the right format string for pd.to_datetime", "should_trigger": false},
   {"query": "can you sprinkle a few emoji at the start of each heading in docs/CONTRIBUTING.md so it's easier to scan, like we did with the checklist doc", "should_trigger": false},
   {"query": "our Jira board has swimlanes named Needs Info, Done, Next Sprint and Blocked — write a script against the API that reorders them so Blocked comes right after Needs Info", "should_trigger": false},
-  {"query": "summarize what we changed in the last three commits so i can paste it into standup", "should_trigger": false}
+  {"query": "summarize what we changed in the last three commits so i can paste it into standup", "should_trigger": false},
+  {"query": "three of my background jobs in the celery worker finish but never send their completion notification to the frontend — figure out why the websocket event isn't firing", "should_trigger": false},
+  {"query": "go through docs/architecture.md and turn every bare #123 issue reference into a full github link", "should_trigger": false}
 ]

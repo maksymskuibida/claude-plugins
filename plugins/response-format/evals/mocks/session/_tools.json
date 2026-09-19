@@ -1,0 +1,21 @@
+{
+  "tools": [
+    {
+      "name": "mark_chapter",
+      "description": "Mark the start of a new chapter in this session.\n\nCall this when the work shifts to a meaningfully different phase — e.g. after finishing exploration and starting implementation, after a fix lands and you move to verification, or when the user pivots to an unrelated request. The user sees a divider in the transcript and a floating table of contents for jumping between chapters.\n\nUse sparingly: a chapter should cover a coherent stretch of work, not every tool call. A typical session has 3–8 chapters. Do not mark a chapter for the very first message — the session start is implicit.\n\nThe title is a short noun phrase (\"Codebase exploration\", \"Auth bug fix\", \"Test verification\"), not a sentence.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Short noun-phrase title for the chapter (under 40 chars). Shown in the table of contents."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Optional one-line summary of what this chapter covers. Shown on hover in the table of contents."
+          }
+        }
+      }
+    }
+  ]
+}
