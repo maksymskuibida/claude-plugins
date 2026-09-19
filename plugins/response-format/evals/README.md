@@ -49,7 +49,8 @@ How it is put together, and why:
   report" is four cases over a shared, growing history rather than one four-turn run. The history
   of case 4 therefore contains *ideal* mid-flight replies, not whatever cases 1–3 produced.
 
-Results go to `evals/results/`, which is gitignored.
+Results go to `evals/results/`. A replay run also writes the resumed session's transcript
+(`<session-id>.jsonl`) beside the `history.jsonl` it started from. Both are gitignored.
 
 ## Trigger eval set — `trigger-eval.json`
 
