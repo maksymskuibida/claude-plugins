@@ -18,7 +18,7 @@ while work is still running, then the one that completes the job.
 | `supervision-4-hand-back` | … + notification 3 and its reply | notification 4 of 4 — job complete | chapter tool called exactly once, then ONE report: `Needs you` first, all four MRs in a table, every MR a full-URL markdown link and no bare `!242`, the open doubt restated rather than pointed at, MR 243's unseen pipeline and the agents' verdicts not rounded up into facts |
 
 Run it with `claude plugin eval` ([docs](https://code.claude.com/docs/en/plugin-evals.md)) from the
-plugin root. The cheap form — one run per case, plugin arm only, about $0.40:
+plugin root. The cheap form — one run per case, plugin arm only, about $0.30:
 
 ```bash
 claude plugin eval . --tag supervision --runs 1 --ablation none --no-publish
