@@ -8,8 +8,8 @@
     {
       "name": "response-format",
       "source": "./plugins/response-format",
-      "description": "A house style for Claude's replies: an ask-first report structure, consequence-bearing bullets, decisions through the question UI, and a hard bias against unverified claims.",
-      "version": "1.0.0"
+      "description": "A house style for Claude's replies: one self-contained, fully linked, ask-first report at hand-back or when you are needed, quiet mid-flight, decisions through the question UI, and a hard bias against unverified claims.",
+      "version": "2.0.0"
     },
     {
       "name": "worktree-cleanup",

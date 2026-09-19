@@ -3,3 +3,7 @@
 .idea/
 __pycache__/
 *.pyc
+# claude plugin eval output
+plugins/*/evals/results/
+# session transcripts a replay run writes beside the history it resumes
+plugins/*/evals/**/[0-9a-f]*-[0-9a-f]*-[0-9a-f]*-[0-9a-f]*-[0-9a-f]*.jsonl
