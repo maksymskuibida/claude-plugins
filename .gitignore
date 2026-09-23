@@ -7,3 +7,6 @@ __pycache__/
 plugins/*/evals/results/
 # session transcripts a replay run writes beside the history it resumes
 plugins/*/evals/**/[0-9a-f]*-[0-9a-f]*-[0-9a-f]*-[0-9a-f]*-[0-9a-f]*.jsonl
+# eval-only fixture plugin (declares a mock MCP server); build_history.py regenerates it.
+# Kept out of the tree so the shipped plugin carries no nested plugin.json or .mcp.json.
+plugins/*/evals/**/session-tools/

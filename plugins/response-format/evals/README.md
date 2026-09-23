@@ -18,9 +18,11 @@ while work is still running, then the one that completes the job.
 | `supervision-4-hand-back` | … + notification 3 and its reply | notification 4 of 4 — job complete | chapter tool called exactly once, then ONE report: `Needs you` first, all four MRs in a table, every MR a full-URL markdown link and no bare `!242`, the open doubt restated rather than pointed at, MR 243's unseen pipeline and the agents' verdicts not rounded up into facts |
 
 Run it with `claude plugin eval` ([docs](https://code.claude.com/docs/en/plugin-evals.md)) from the
-plugin root. The cheap form — one run per case, plugin arm only, about $0.30:
+plugin root. First regenerate the `session-tools/` fixture, which is not committed (see below), then
+the cheap form — one run per case, plugin arm only, about $0.30:
 
 ```bash
+python3 evals/supervision/build_history.py
 claude plugin eval . --tag supervision --runs 1 --ablation none --no-publish
 ```
 
@@ -43,6 +45,10 @@ How it is put together, and why:
   `mcp__plugin_session-tools_session__mark_chapter` — a different name from the real one, which is
   the point: the style's rule is tool-agnostic and has to work from the description alone. The
   harness requires a plugin shipped with a case to sit inside that case, hence four copies.
+  **The fixture is gitignored**, not committed: it is a nested `.claude-plugin/plugin.json` plus a
+  `.mcp.json`, and a marketplace install ships the whole plugin directory, so committing it would
+  ship an MCP server declaration inside `response-format` itself. `build_history.py` writes it
+  again in one run; the output is byte-identical each time.
 - **`chapter-mark` is `arm: with-only`**, as the docs ask of any grader a no-plugin arm could never
   pass. Replay cases run single-arm, where it is scored like the rest.
 - **Each case is one turn.** The harness sends one prompt per run, so "three quiet turns, then one
