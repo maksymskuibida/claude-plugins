@@ -1,5 +1,0 @@
-{
-  "name": "session-tools",
-  "version": "0.0.1",
-  "description": "Eval-only fixture: declares the MCP server the suite's mocks answer, so a run has a chapter tool to call. Never installed, never started."
-}
