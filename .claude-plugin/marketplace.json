@@ -6,6 +6,12 @@
   "description": "Maksym Skuibida's personal Claude Code tooling — small, opinionated plugins.",
   "plugins": [
     {
+      "name": "dish-media",
+      "source": "./plugins/dish-media",
+      "description": "Turn an iPhone shoot of 50–200 dishes into tablet-ready sRGB JPEGs and seamless H.264 loops with one measured, deterministic look per session and contact-sheet QA, never a generated pixel.",
+      "version": "1.0.0"
+    },
+    {
       "name": "response-format",
       "source": "./plugins/response-format",
       "description": "A house style for Claude's replies: one self-contained, fully linked, ask-first report at hand-back or when you are needed, quiet mid-flight, decisions through the question UI, and a hard bias against unverified claims.",

@@ -29,6 +29,7 @@ Both forms are verified working with the `claude` CLI (`claude plugin marketplac
 
 | Plugin | What it does |
 |---|---|
+| [`dish-media`](plugins/dish-media) | Grade iPhone dish photos and loop turntable clips for restaurant menu tablets: grey-card calibration, one deterministic look per session, contact-sheet QA, no generative AI. |
 | [`response-format`](plugins/response-format) | One self-contained, fully linked report — Needs you / Done / Next / Risks — at hand-back or when you are needed; one plain line mid-flight. Applies automatically on enable, from the next session. |
 | [`worktree-cleanup`](plugins/worktree-cleanup) | Reclaim disk from orphaned git worktrees without deleting unpushed work or a worktree a session is using. |
 
