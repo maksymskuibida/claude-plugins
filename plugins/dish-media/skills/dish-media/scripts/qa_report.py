@@ -82,6 +82,14 @@ def main() -> int:
         C.die("give --project or --out")
     qa_dir = flags_p.parent if flags_p else out.parent
 
+    def rel(path):  # paths in the report relative to the project, so two runs read the same
+        if path is None:
+            return ""
+        try:
+            return str(Path(path).resolve().relative_to(P.resolve())) if P else Path(path).name
+        except ValueError:
+            return Path(path).name
+
     rows = read_manifest(manifest) if manifest else []
     session = C.load_session(session_p) if session_p and session_p.is_file() else None
     gstats = json.loads(gstats_p.read_text()) if gstats_p and gstats_p.is_file() else {}
@@ -117,13 +125,13 @@ def main() -> int:
         if r.get("kind") == "photo" and r.get("work_file"):
             stem = C.stem_of(r["work_file"])
             if photos and photos.is_dir() and not (photos / f"{stem}.jpg").is_file():
-                computed.append({"file": f"{stem}.jpg", "code": "missing_output", "severity": "error", "detail": f"no graded photo in {photos}"})
+                computed.append({"file": f"{stem}.jpg", "code": "missing_output", "severity": "error", "detail": f"no graded photo in {rel(photos)}"})
             if want_cutouts and cutouts and cutouts.is_dir() and not (cutouts / f"{stem}.jpg").is_file():
-                computed.append({"file": f"{stem}.jpg", "code": "missing_output", "detail": f"no cutout in {cutouts}"})
+                computed.append({"file": f"{stem}.jpg", "code": "missing_output", "detail": f"no cutout in {rel(cutouts)}"})
         elif r.get("kind") == "video":
             stem = C.stem_of(r["original_file"])
             if loops and loops.is_dir() and not (loops / f"{stem}.mp4").is_file():
-                computed.append({"file": r["original_file"], "code": "missing_output", "severity": "error", "detail": f"no loop in {loops}"})
+                computed.append({"file": r["original_file"], "code": "missing_output", "severity": "error", "detail": f"no loop in {rel(loops)}"})
     C.write_flags(qa_dir, "qa", [f["file"] for f in computed] + [r.get("work_file") or r.get("original_file") for r in rows] + list(gstats), computed)
     flags = C.load_flags(qa_dir)
 
@@ -133,7 +141,7 @@ def main() -> int:
     n_photos = sum(1 for r in rows if r.get("kind") == "photo")
     n_videos = sum(1 for r in rows if r.get("kind") == "video")
     lines = ["# dish-media QA report", ""]
-    lines.append(f"- manifest: {n_photos} photos, {n_videos} clips" + (f" ({manifest})" if manifest else ""))
+    lines.append(f"- manifest: {n_photos} photos, {n_videos} clips" + (f" ({rel(manifest)})" if manifest else ""))
     if session:
         prov = session.get("provenance") or {}
         lines.append(f"- session: wb_gains {session['wb_gains']}, exposure x{session['exposure']}, contrast {session['contrast']}, "

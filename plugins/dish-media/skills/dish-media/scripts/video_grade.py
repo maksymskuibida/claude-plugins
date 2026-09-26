@@ -174,7 +174,7 @@ def main() -> int:
         dst = out if single else out / f"{clip.stem}.mp4"
         try:
             entry = grade_clip(clip, dst, session, args, lut_dir, qa)
-            stats[clip.stem] = entry
+            stats[dst.stem] = entry   # keyed by the output loop, like frame_grid.py
             per = entry.get("period") or {}
             msg = f"  {clip.name}: {entry['loop']} start {entry['start_s']}s duration {entry['duration_s']}s ({entry['frames']} frames)"
             if per:
