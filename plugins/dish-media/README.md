@@ -1,6 +1,6 @@
 # dish-media
 
-Turns an iPhone shoot of restaurant dishes and drinks — two photos and one turntable clip
+Turns a phone shoot of restaurant dishes and drinks — two photos and one turntable clip
 per item, 50–200 items per menu — into what the tablets on the tables show: sRGB JPEGs and
 seamless SDR H.264 loops, with one measured look for the whole menu and not one generated
 pixel.
@@ -35,12 +35,14 @@ needs the `isnet-general-use` rembg model, about 170 MB, fetched once.
 
 1. **Turntable + soft side light**, the same place, height and framing for every dish; one
    grey-card frame at the start of every session, under that light.
-2. **iPhone: Settings → Camera → Record Video → HDR Video off**, and Formats → Most
-   Compatible (or let the ingest convert HEIC). HDR video and Display P3 stills are the two
-   things that look wrong on cheap Android tablets.
-3. **One Photographic Style, never changed** (Preserve Settings → Creative Controls on);
-   AE/AF/WB locked on the card before each dish. Blackmagic Camera set to Rec.709 does all
-   of this explicitly.
+2. **HDR video off** in the camera app (iPhone: Settings → Camera → Record Video → HDR
+   Video; Android: the HDR10+ or HDR video switch in the camera settings), and JPEG or
+   "most compatible" stills if offered (or let the ingest convert HEIC). HDR video and
+   wide-gamut (Display P3) stills are the two things that look wrong on cheap Android tablets.
+3. **One colour style, never changed** (iPhone: one Photographic Style with Preserve
+   Settings → Creative Controls on; Android: one picture profile, no scene optimiser);
+   AE/AF/WB locked on the card before each dish. Blackmagic Camera (iOS and Android) set
+   to Rec.709 does all of this explicitly.
 4. **4K30, 1× lens**, two photos per dish (tablet angle and top-down) and one rotation of
    8–12 s with two seconds of handle on each end.
 5. Wipe the plate, centre it, keep cutlery and napkins out unless they are the dish.
@@ -98,7 +100,7 @@ A session, as Claude drives it through the skill (`S` is the skill's `scripts/` 
 - **One parameter set per session** in `work/session.json`; differences between dishes are
   per-file overrides in that file.
 - **Claude judges contact sheets and frame grids only**, never single files, and only the
-  exported sRGB JPEG or MP4 frames — never HEIC, HDR or Display P3 originals.
+  exported sRGB JPEG or MP4 frames — never HEIC, HDR or wide-gamut (Display P3) originals.
 - **Only light and colour.** Never "improve" the food.
 - **Originals untouched**; `raw/` is read-only to every script.
 - **Deterministic**: same inputs and same session → byte-identical outputs.
@@ -143,16 +145,19 @@ importable and the cutout checks are skipped otherwise (`--skip-cutout`).
 ## Troubleshooting
 
 - **HEIC does not convert** — on macOS the ingest uses `sips`; if it fails on one file the
-  file is flagged `unreadable` and the run continues. Export that one from Photos as JPEG.
+  file is flagged `unreadable` and the run continues. Export that one from the phone's
+  gallery as JPEG.
   Off macOS, `pip install pillow-heif`.
 - **rembg model download** — first use fetches `isnet-general-use` (~170 MB) into
   `~/.rembg/models/`; behind a proxy set `HTTPS_PROXY`, or run `setup.sh` on a good
   connection. If the name is unknown to your rembg version it falls back to `u2net`.
-- **The clip looks grey and flat** — it was shot in HDR (Dolby Vision / HLG). The ingest
+- **The clip looks grey and flat** — it was shot in HDR (Dolby Vision on an iPhone, HDR10+
+  or HLG on Android). The ingest
   flags it `hdr_source` and `video_grade.py` refuses it; run `tonemap_hdr.sh IN OUT` and
   grade the output. Turn HDR Video off on the phone; that is the real fix.
 - **Reds and greens look neon on the tablet** — the tablet app ignores ICC profiles and
-  the file was Display P3. Everything the pipeline writes is sRGB; if a file went straight
+  the file was wide-gamut (Display P3, as iPhones and some Android phones write). Everything
+  the pipeline writes is sRGB; if a file went straight
   from the phone to the tablet, it bypassed the pipeline.
 - **`--auto` put the card box on the table or the plate** — pass `--card X,Y,W,H` in pixels
   of the working image; always look at `qa/card-box.jpg`.

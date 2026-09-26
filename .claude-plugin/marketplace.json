@@ -8,7 +8,7 @@
     {
       "name": "dish-media",
       "source": "./plugins/dish-media",
-      "description": "Turn an iPhone shoot of 50–200 dishes into tablet-ready sRGB JPEGs and seamless H.264 loops with one measured, deterministic look per session and contact-sheet QA, never a generated pixel.",
+      "description": "Turn a phone shoot of 50–200 dishes into tablet-ready sRGB JPEGs and seamless H.264 loops with one measured, deterministic look per session and contact-sheet QA, never a generated pixel.",
       "version": "1.0.0"
     },
     {

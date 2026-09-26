@@ -26,7 +26,7 @@ EXPOSURE_TOL = 0.06   # median luminance, sRGB 0-1
 CAST_TOL = 0.015      # OKLab a/b distance
 
 HINTS = {
-    "unreadable": "the original could not be decoded; re-export it from Photos as JPEG",
+    "unreadable": "the original could not be decoded; re-export it from the phone's gallery as JPEG",
     "hdr_source": "run tonemap_hdr.sh on the clip, then video_grade.py on the result; turn HDR Video off on the phone",
     "small_source": "fine for a tablet if it is at least the output size; otherwise reshoot",
     "no_capture_time": "harmless; the manifest just has no date for it",

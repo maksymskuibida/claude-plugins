@@ -1,11 +1,11 @@
 ---
 name: dish-media
-description: Turn an iPhone shoot of restaurant dishes and drinks into tablet-ready menu media with only truthful edits — exposure, white balance, contrast, shadows and highlights, modest saturation, crop and straighten, an optional plain background with a soft contact shadow, and a seamless turntable loop — delivered as sRGB JPEG and SDR H.264 MP4 that cheap Android tablets show correctly. Use it whenever someone wants to edit, grade, colour-correct, fix, batch-process or "make consistent" dish, food, drink or menu photos, make turntable or rotation clips loop, prepare or export menu media for the tablets, calibrate a shoot from a grey card, check or judge a contact sheet or frame grid, cut dishes out onto a plain background, or convert HEIC or HDR iPhone files for a menu — and for `/dish-media` with a subcommand (setup, ingest, calibrate, grade, cutout, sheet, loops, qa, deliver). It measures what can be measured (grey card), lets Claude judge one contact sheet of reference dishes to pick ONE parameter set per session, applies that set to every file deterministically, and uses further contact sheets only to catch outliers. It never generates, adds, removes or retouches food. Do NOT use it for generative edits ("add steam", "make the sauce glossier", "remove the fork"), for photos that are not menu media, or for video beyond trimming, grading, stabilising and looping a real rotation.
+description: Turn a phone shoot of restaurant dishes and drinks into tablet-ready menu media with only truthful edits — exposure, white balance, contrast, shadows and highlights, modest saturation, crop and straighten, an optional plain background with a soft contact shadow, and a seamless turntable loop — delivered as sRGB JPEG and SDR H.264 MP4 that cheap Android tablets show correctly. Use it whenever someone wants to edit, grade, colour-correct, fix, batch-process or "make consistent" dish, food, drink or menu photos, make turntable or rotation clips loop, prepare or export menu media for the tablets, calibrate a shoot from a grey card, check or judge a contact sheet or frame grid, cut dishes out onto a plain background, or convert HEIC or HDR phone files for a menu — and for `/dish-media` with a subcommand (setup, ingest, calibrate, grade, cutout, sheet, loops, qa, deliver). It measures what can be measured (grey card), lets Claude judge one contact sheet of reference dishes to pick ONE parameter set per session, applies that set to every file deterministically, and uses further contact sheets only to catch outliers. It never generates, adds, removes or retouches food. Do NOT use it for generative edits ("add steam", "make the sauce glossier", "remove the fork"), for photos that are not menu media, or for video beyond trimming, grading, stabilising and looping a real rotation.
 ---
 
 # Dish media: from the plate to the tablet
 
-A restaurant shoots every dish and drink on an iPhone: two photos and one 8–12 s clip of
+A restaurant shoots every dish and drink on a phone: two photos and one 8–12 s clip of
 the dish turning on a turntable, 50–200 items per menu. The tablets on the tables show
 the photo and the loop. This skill takes the shoot from `raw/` to a delivery folder with
 edits a careful human editor would make and nothing else, and it does it the same way
@@ -29,7 +29,7 @@ for every file so the menu looks like one menu.
    slightly different opinions. A sheet of 20 thumbnails, compared against the reference
    dish in the first cell, gives one opinion per batch and shows outliers as outliers.
 5. **Look only at exported sRGB JPEGs and MP4 frame grids** — the thing the tablet will
-   show. Never open a HEIC, an HDR clip or a Display-P3 file to judge it: the viewer
+   show. Never open a HEIC, an HDR clip or a wide-gamut (Display P3) file to judge it: the viewer
    downscales to about 1.1 MP and does not colour-manage, so what you would see is not
    what is there.
 6. **Only light and colour.** Exposure, white balance, contrast, shadows, highlights,
@@ -48,8 +48,8 @@ https://claude.ai/artifact/WtSMd9EEqLpLhUH28CXxqE, notes in
 generated orbits and 3D capture for this exact job. Its conclusions drive every choice
 here: generative editors re-render the dish and cannot give one look to 200 items; the
 edits that are safe are parametric; consistency across dishes matters more than
-perfection on one; a locked-off iPhone in SDR with a grey-card frame removes most of the
-editing; HDR video and Display P3 stills are the two things that look wrong on cheap
+perfection on one; a locked-off phone in SDR with a grey-card frame removes most of the
+editing; HDR video and wide-gamut (Display P3) stills are the two things that look wrong on cheap
 Android tablets, so delivery is sRGB JPEG and SDR H.264. The parts that need a person's
 eye (which of five looks, is this matte broken, is that seam visible) are the parts
 Claude does here — on sheets, once per batch.
@@ -295,16 +295,18 @@ forward then backward; use it when a revolution was not found or the dish is sym
 yuv420p, CRF 20, bt709 tags, faststart, no audio, no metadata, timestamps exactly on the
 frame grid.
 
-An HDR clip (`hdr_source` in the flags: Dolby Vision / HLG from a phone with HDR Video
-on) is refused per clip. Tone-map it first, then grade the SDR intermediate:
+An HDR clip (`hdr_source` in the flags: HLG or PQ, which is what a phone writes with HDR
+video on — Dolby Vision on an iPhone, HDR10+ on most Android phones) is refused per clip. Tone-map it first, then grade the SDR intermediate:
 
 ```bash
 bash "$S/tonemap_hdr.sh" "$P/raw/video/IMG_0013.mov" "$P/work/sdr/IMG_0013.mov"
 python3 "$S/video_grade.py" --session "$P/work/session.json" --in "$P/work/sdr/IMG_0013.mov" --out "$P/out/loops/IMG_0013.mp4" --qa "$P/qa"
 ```
 
-That is a repair. Turn Settings → Camera → Record Video → HDR Video off before the next
-shoot, or use Blackmagic Camera set to Rec.709, and no clip needs it.
+That is a repair. Turn HDR video off in the camera app before the next shoot (iPhone:
+Settings → Camera → Record Video → HDR Video; Android: the camera app's HDR10+ or HDR
+video switch), or use Blackmagic Camera (iOS and Android) set to Rec.709, and no clip
+needs it.
 
 ### 10. Frame-grid QA
 
@@ -377,8 +379,8 @@ Blur and offset of the shadow are in pixels at 1600 px and scale with the output
   `--duration` to the full turn from the grid, or use `pingpong`.
 - **HEIC needs `sips` or pillow-heif; Display P3 must be converted, not relabelled.** The
   ingest does both; a working file that still looks over-saturated on the sheet is a
-  file that came in without a profile and was P3 anyway — rare, but reshoot with
-  Formats → Most Compatible or export from Photos as JPEG.
+  file that came in without a profile and was P3 anyway — rare, but reshoot with the
+  camera set to JPEG / "most compatible", or export it from the phone's gallery as JPEG.
 - **rembg is segmentation, not magic.** Glass, clear sauces, steam and single herb leaves
   are exactly what it gets wrong. The confidence score catches most of it; the cutout
   sheet catches the rest. Delivering the plain graded photo for those dishes is a fine

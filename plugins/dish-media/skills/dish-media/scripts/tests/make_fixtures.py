@@ -9,7 +9,7 @@ turns exactly once every 8 s at 30 fps for 12 s) and DIR/fixtures.json
 with the ground truth (card box in raw pixels, per-dish exposure offsets).
 
 Every dish is rendered with a warm cast (R x1.25, B x0.78) and one stop
-under, which is what a badly white-balanced iPhone shot looks like.
+under, which is what a badly white-balanced phone shot looks like.
 """
 from __future__ import annotations
 

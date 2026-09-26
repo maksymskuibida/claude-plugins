@@ -7,8 +7,9 @@
 # detail better than Reinhard), re-encodes as a high-quality SDR
 # intermediate for video_grade.py. The transfer is read from the file's
 # tags; pass hlg or pq when the clip is untagged. This is a repair, not a
-# workflow: turn Settings > Camera > Record Video > HDR Video off and
-# shoot SDR, then none of this is needed.
+# workflow: turn HDR video off in the phone's camera app (iPhone: Settings >
+# Camera > Record Video > HDR Video; Android: the HDR10+ / HDR video switch)
+# and shoot SDR, then none of this is needed.
 set -euo pipefail
 
 if [ $# -lt 2 ]; then
