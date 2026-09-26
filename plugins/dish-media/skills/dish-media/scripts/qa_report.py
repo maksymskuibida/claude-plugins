@@ -40,6 +40,8 @@ HINTS = {
     "period_weak": "the turntable may not have completed a turn in the clip; check the grid or use --loop pingpong",
     "video_failed": "see the detail; the clip was not exported",
     "loop_seam": "re-run video_grade.py with a different --start, or --loop pingpong",
+    "direction_mismatch": "one clip turns the other way; re-export it with --reverse so every loop on the menu turns alike, or reshoot",
+    "not_a_dish": "the frame or clip does not show a dish; keep it out of the delivery (session exclude list)",
     "missing_output": "the step that produces this file did not run for it, or it failed",
 }
 
@@ -119,17 +121,30 @@ def main() -> int:
         if pred and max(abs(pred[0] - pred[1]), abs(pred[2] - pred[1])) > tol:
             computed.append({"file": "session.json", "code": "card_not_neutral", "severity": "error",
                              "detail": f"predicted card {pred}, tolerance {tol}/255"})
+    # rotation direction: every loop on one menu should turn the same way
+    dirs = {k: v.get("direction") for k, v in vstats.items() if isinstance(v, dict) and v.get("direction") in ("cw", "ccw")}
+    if len(set(dirs.values())) > 1:
+        minority = min(set(dirs.values()), key=lambda d: sum(1 for v in dirs.values() if v == d))
+        for k, d in sorted(dirs.items()):
+            if d == minority:
+                computed.append({"file": f"{k}.mp4", "code": "direction_mismatch", "value": d,
+                                 "detail": f"turns {d} while most clips turn {'cw' if d == 'ccw' else 'ccw'}"})
     # missing outputs
     want_cutouts = bool(session and session.get("background"))
+    excluded = {C.stem_of(x) for x in ((session or {}).get("exclude") or [])}
     for r in rows:
         if r.get("kind") == "photo" and r.get("work_file"):
             stem = C.stem_of(r["work_file"])
+            if stem in excluded:
+                continue
             if photos and photos.is_dir() and not (photos / f"{stem}.jpg").is_file():
                 computed.append({"file": f"{stem}.jpg", "code": "missing_output", "severity": "error", "detail": f"no graded photo in {rel(photos)}"})
             if want_cutouts and cutouts and cutouts.is_dir() and not (cutouts / f"{stem}.jpg").is_file():
                 computed.append({"file": f"{stem}.jpg", "code": "missing_output", "detail": f"no cutout in {rel(cutouts)}"})
         elif r.get("kind") == "video":
             stem = C.stem_of(r["original_file"])
+            if stem in excluded:
+                continue
             if loops and loops.is_dir() and not (loops / f"{stem}.mp4").is_file():
                 computed.append({"file": r["original_file"], "code": "missing_output", "severity": "error", "detail": f"no loop in {rel(loops)}"})
     C.write_flags(qa_dir, "qa", [f["file"] for f in computed] + [r.get("work_file") or r.get("original_file") for r in rows] + list(gstats), computed)
@@ -146,7 +161,8 @@ def main() -> int:
         prov = session.get("provenance") or {}
         lines.append(f"- session: wb_gains {session['wb_gains']}, exposure x{session['exposure']}, contrast {session['contrast']}, "
                      f"shadows {session['shadows']}, highlights {session['highlights']}, saturation {session['saturation']}, "
-                     f"background {session.get('background')}, {len(session.get('overrides') or {})} override(s)")
+                     f"background {session.get('background')}, {len(session.get('overrides') or {})} override(s), "
+                     f"{len(session.get('exclude') or [])} excluded")
         if prov.get("predicted_card_srgb255"):
             lines.append(f"- predicted card: {prov['predicted_card_srgb255']} (target {round(prov['targets']['card_luminance_srgb'] * 255, 1)})")
     if meds:
@@ -154,7 +170,8 @@ def main() -> int:
                      f"range {min(meds.values()):.3f}..{max(meds.values()):.3f}")
     if vstats:
         seams = [v.get("seam_similarity") for v in vstats.values() if v.get("seam_similarity") is not None]
-        lines.append(f"- loops: {len(vstats)} clips" + (f", seam similarity min {min(seams):.3f}" if seams else ""))
+        turn = ", ".join(f"{k} {v}" for k, v in sorted(dirs.items()))
+        lines.append(f"- loops: {len(vstats)} clips" + (f", seam similarity min {min(seams):.3f}" if seams else "") + (f"; direction: {turn}" if turn else ""))
     lines.append(f"- flags: {len(by_sev['error'])} error, {len(by_sev['warn'])} warn, {len(by_sev['info'])} info")
     lines.append("")
     for sev, title in (("error", "Errors (fix before delivery)"), ("warn", "Warnings (look at the sheet)"), ("info", "Info")):
@@ -176,7 +193,8 @@ def main() -> int:
         lines.append("## What to do")
         lines.append("")
         for code in codes:
-            lines.append(f"- `{code}`: {HINTS.get(code, f.get('hint', ''))}")
+            hint = HINTS.get(code) or next((str(x.get("hint", "")) for x in flags if x.get("code") == code and x.get("hint")), "")
+            lines.append(f"- `{code}`: {hint}")
         lines.append("")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n")

@@ -5,6 +5,9 @@
     calibrate.py --from work/session.json --out work/session.json --contrast-strength 3.5
     calibrate.py --from work/session.json --out work/session.json \
         --override dish-0412 exposure_ev=0.3 saturation=0.95
+    calibrate.py --from work/session.json --out work/session.json \
+        --file-measure dish-0431 work/measure/dish-0431.json --file-target-luminance 0.85
+    calibrate.py --from work/session.json --out work/session.json --exclude IMG_0008 IMG_0009
 
 White balance gains make the card neutral in linear light. Exposure is the
 multiplier that lands the card at --target-luminance in the *output* JPEG,
@@ -65,6 +68,12 @@ def main() -> int:
     ap.add_argument("--override", nargs="+", action="append", metavar=("FILE", "KEY=VALUE"),
                     help="per-file override: FILE key=value [key=value ...]; repeatable")
     ap.add_argument("--clear-overrides", action="store_true")
+    ap.add_argument("--file-measure", nargs=2, action="append", metavar=("FILE", "MEASURE_JSON"),
+                    help="per-file white balance and exposure from that file's own measurement (a plate rim, a card in "
+                         "that frame); stored as an override; repeatable")
+    ap.add_argument("--file-target-luminance", type=float, help="target for --file-measure patches (default: --target-luminance; ~0.85 for a white plate rim)")
+    ap.add_argument("--exclude", nargs="+", metavar="FILE", help="files that are not dishes: skipped by grade, cutout, qa_report and deliver; repeatable")
+    ap.add_argument("--clear-excludes", action="store_true")
     ap.add_argument("--note", help="free text stored in provenance")
     args = ap.parse_args()
 
@@ -148,11 +157,34 @@ def main() -> int:
             ov[k] = parse_value(v)
         session["overrides"][name] = ov
 
-    # predicted card in the output, for the record and for QA
+    # per-file measurements: gains and exposure for one file, kept as an override
+    for name, mpath in args.file_measure or []:
+        fm = json.loads(Path(mpath).read_text())
+        if fm.get("schema") != "dish-media.measure/1":
+            C.die(f"{mpath} is not a measure.py file")
+        r, g, b = fm["card_mean_linear"]
+        target = args.file_target_luminance if args.file_target_luminance is not None else args.target_luminance
+        wanted_lin = float(C.srgb_to_linear(C.invert_tone(target, session)))
+        ov = dict(session["overrides"].get(C.stem_of(name)) or {})
+        ov["wb_gains"] = [round(g / r, 6), 1.0, round(g / b, 6)]
+        ov["exposure"] = round(wanted_lin / float(g), 6)
+        session["overrides"][C.stem_of(name)] = ov
+        C.log(f"  {C.stem_of(name)}: own gains {ov['wb_gains']} exposure x{ov['exposure']} (patch -> {target})")
+
+    # exclude list
+    if args.clear_excludes:
+        session["exclude"] = []
+    for name in args.exclude or []:
+        if C.stem_of(name) not in session["exclude"]:
+            session["exclude"].append(C.stem_of(name))
+
+    # predicted card in the output, for the record and for QA; without a new
+    # measurement the card kept in provenance is used, so --from runs keep it
     import numpy as np
     predicted = None
-    if card is not None:
-        lin = np.asarray(card["card_mean_linear"], dtype=np.float32)[None, None, :]
+    card_lin = card["card_mean_linear"] if card is not None else ((prov.get("card") or {}).get("mean_linear"))
+    if card_lin:
+        lin = np.asarray(card_lin, dtype=np.float32)[None, None, :]
         out = C.linear_to_srgb(C.apply_look_linear(lin, session))[0, 0] * 255.0
         predicted = [round(float(v), 2) for v in out]
 
@@ -167,7 +199,7 @@ def main() -> int:
     session["provenance"] = prov
     ordered = {"schema": C.SESSION_SCHEMA, "provenance": prov}
     for k in ("wb_gains", "exposure", "contrast", "shadows", "highlights", "saturation", "crop_ratio",
-              "straighten_deg", "output_long_edge", "background", "shadow", "overrides"):
+              "straighten_deg", "output_long_edge", "background", "shadow", "exclude", "overrides"):
         ordered[k] = session[k]
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     C.save_session(args.out, ordered)
@@ -177,7 +209,7 @@ def main() -> int:
           f"saturation {session['saturation']}")
     if predicted:
         C.log(f"predicted card in output: {predicted} (target {round(args.target_luminance * 255, 1)})")
-    C.log(f"overrides: {len(session['overrides'])} -> {args.out}")
+    C.log(f"overrides: {len(session['overrides'])}, excluded: {len(session['exclude'])} -> {args.out}")
     return 0
 
 

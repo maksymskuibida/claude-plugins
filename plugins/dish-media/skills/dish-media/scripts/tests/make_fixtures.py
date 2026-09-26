@@ -39,7 +39,7 @@ FOODS = [
 ]
 
 
-def render_dish(seed: int, ev: float = 0.0, tilt_deg: float = 0.0) -> np.ndarray:
+def render_dish(seed: int, ev: float = 0.0, tilt_deg: float = 0.0, portrait: bool = False) -> np.ndarray:
     import cv2
     rng = np.random.default_rng(seed)
     # a table with a little texture, as real tables have (a flat synthetic
@@ -71,7 +71,10 @@ def render_dish(seed: int, ev: float = 0.0, tilt_deg: float = 0.0) -> np.ndarray
         m = cv2.getRotationMatrix2D((W / 2.0, H / 2.0), tilt_deg, 1.0)
         img = cv2.warpAffine(img, m, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
     img = img * CAST * np.float32(UNDER * (2.0 ** ev))
-    return np.clip(np.rint(C.linear_to_srgb(np.clip(img, 0, 1)) * 255.0), 0, 255).astype(np.uint8)
+    out = np.clip(np.rint(C.linear_to_srgb(np.clip(img, 0, 1)) * 255.0), 0, 255).astype(np.uint8)
+    if portrait:
+        out = np.ascontiguousarray(np.rot90(out, k=-1))   # 3000 wide, 4000 tall; the card ends up top-left
+    return out
 
 
 def save_jpeg_plain(path: Path, rgb8: np.ndarray, icc: bytes | None = None) -> None:
@@ -137,7 +140,7 @@ def write_video(path: Path, fps: int = 30, seconds: int = 12, period: float = 8.
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--dishes", type=int, default=5)
+    ap.add_argument("--dishes", type=int, default=6)
     ap.add_argument("--no-video", action="store_true")
     ap.add_argument("--hdr", action="store_true", help="also write an HLG-tagged clip")
     args = ap.parse_args()
@@ -150,7 +153,8 @@ def main() -> int:
     for i in range(1, args.dishes + 1):
         ev = 0.5 if i == 4 else 0.0          # dish 4 is the exposure outlier
         tilt = 2.0 if i == 5 else 0.0        # dish 5 needs straightening
-        rgb8 = render_dish(seed=1000 + i, ev=ev, tilt_deg=tilt)
+        portrait = i == 6                    # dish 6 stands upright
+        rgb8 = render_dish(seed=1000 + i, ev=ev, tilt_deg=tilt, portrait=portrait)
         if i == 2:
             name = f"dish-{i:03d}.png"
             from PIL import Image
@@ -171,7 +175,7 @@ def main() -> int:
         else:
             name = f"dish-{i:03d}.jpg"
             save_jpeg_plain(photos / name, rgb8, C.srgb_profile_bytes())
-        truth["dishes"][name] = {"ev": ev, "tilt_deg": tilt, "seed": 1000 + i}
+        truth["dishes"][name] = {"ev": ev, "tilt_deg": tilt, "seed": 1000 + i, "portrait": portrait}
         print(f"  {name}", file=sys.stderr)
     if not args.no_video:
         vdir = root / "raw" / "video"

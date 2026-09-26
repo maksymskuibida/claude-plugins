@@ -139,6 +139,17 @@ The JSON has the card's mean RGB, R/G and B/G in linear light, luminance percent
 clipping. `neutral_error_255` is how far from neutral the card is *before* correction —
 a healthy warm cast reads 5–15.
 
+**No card frame?** Do not fall back to neutral gains (`1,1,1`) and call the batch
+consistent: nothing was corrected. Measure the best neutral thing under that light, the
+rim of a plain white plate, with `--card X,Y,W,H` on the reference dish, and tell
+`calibrate.py` that the patch is white, not 18% grey: `--target-luminance 0.85`. Say in
+the hand-back that white balance rests on the plate being neutral (bone-white china is
+slightly warm). If the photos come from **different cameras or days**, one card cannot
+serve them all: measure a plate rim in each photo and give each its own gains and
+exposure with `calibrate.py --file-measure NAME measure.json --file-target-luminance 0.85`
+(step 3). That is still one look — the tone curve, saturation and crop stay shared — with
+the light corrected per frame, which is the only honest way to make mixed sources match.
+
 ### 3. Calibrate
 
 ```bash
@@ -153,6 +164,13 @@ background. Any value can be set with a flag (`--contrast-strength 3.5 --saturat
 --crop-ratio 1:1 --background '#F6F4EF'`); re-running with `--from` keeps what is not
 re-specified, including overrides. Because exposure is solved through the curve, changing
 contrast or shadows here keeps the card on target; hand-editing the JSON does not.
+
+Two more things live in the session file. `--exclude IMG_0008 IMG_0009` lists files that
+are not dishes (an interior, a table shot with four plates, the card frame if it was
+ingested with the rest): `grade.py`, `qa_report.py` and `deliver.py` skip them, so
+nothing has to be deleted by hand. `--file-measure NAME measure.json` turns a measurement
+taken in that one frame into per-file gains and exposure (an override), for a dish shot
+under a different light than the session's card.
 
 If the clips were shot with different exposure than the photos (video ISO and shutter
 differ), shoot the card on video too, grab a frame and calibrate a second session from it
@@ -185,7 +203,8 @@ python3 "$S/calibrate.py" --from "$P/work/session.json" --measure "$P/work/measu
 
 If two references disagree (the pale dish wants −0.3, the dark one +0.3), the session
 takes the middle and the outliers get per-file overrides in step 9. Do not average by
-rendering more variants; one round is the budget.
+rendering more variants; one round is the budget. (`--variants` renders into one folder
+per reference; a second reference gets its own `--out` folder and its own sheet.)
 
 ### 5. Grade everything
 
@@ -195,7 +214,11 @@ python3 "$S/grade.py" --session "$P/work/session.json" --in "$P/work/photos" --o
 
 Per file: sRGB → linear, gains, exposure, tone curve on luminance (ratio-preserving, so
 hue and chroma are untouched), saturation as OKLab chroma scaling, back to sRGB,
-straighten, crop, resize, JPEG q90 with the sRGB profile embedded and no EXIF. Files
+straighten, crop, resize, JPEG q90 with the sRGB profile embedded and no EXIF.
+`crop_ratio` is long edge to short edge, so `4:3` gives a landscape photo 4:3 and a
+portrait photo 3:4; a per-file `crop_scale=0.9` takes the largest window and shrinks it,
+which is how a burnt-in phone watermark or a neighbour's plate at the edge is cropped away
+without changing the batch's aspect ratio. Files
 with more than 1% of pixels at 254+ are flagged `clip_high`; `qa/grade_stats.json`
 holds every file's median luminance and clipping for the sheets and the report.
 
@@ -208,13 +231,20 @@ python3 "$S/cutout.py" --session "$P/work/session.json" --in "$P/out/photos" \
   --out "$P/out/cutouts" --mattes "$P/work/mattes" --qa "$P/qa"
 ```
 
+A cutout is for a frame that holds one dish. A table shot with three plates, a glass and
+cutlery has no single subject; the model returns a jumble and the score says so (under
+0.3 means "not one subject", not "a rough edge"). Deliver those as graded photos, or
+`--exclude` them, and ask for a reshoot with one plate filling the frame.
+
 rembg (`isnet-general-use`, falling back to `u2net`) gives the matte; it is eroded one
 pixel and feathered, composited in linear light, and a contact shadow is made from the
 blurred, offset alpha with the session's `shadow` settings. Every file gets a confidence
 score from alpha coverage, soft-edge area, holes, border contact and faint ghosts away
 from the dish; below 0.8 it is flagged `matte_low_confidence`, so any one clear defect
 puts the file on the list. Glass, steam, thin herbs
-and cutlery are the usual reasons. `--reuse-mattes` recomposites after a change of
+and cutlery are the usual reasons; so is a white bowl on a white cloth, where a whole
+component can vanish from the matte with no soft edge to warn you — compare the cutout
+sheet against the graded sheet, dish by dish, before trusting a high score. `--reuse-mattes` recomposites after a change of
 background or shadow without running the model again.
 
 ### 7. Contact-sheet QA
@@ -256,9 +286,17 @@ previous sheet.
   nothing should. Name the file for a reshoot.
 - **Straightness and framing**: a tilted plate rim gets `straighten_deg`; a dish sitting
   off-centre gets `crop_center=[0.55,0.5]`.
+- **Is it the dish?** The first question on every sheet and grid, before exposure or
+  colour: an interior, a table with four plates, a hand, a clip of something that is not
+  on the menu. Nothing downstream fixes content. Put the file on the session's
+  `--exclude` list and name it in the hand-back; never deliver it because the pipeline ran.
 - **Loop seam** (frame grids): the first and last cells should look like consecutive
   frames. A jump means the period was wrong (`period_ambiguous` on a symmetric dish) or
   the turntable was not up to speed at `--start`.
+- **Direction**: `video_grade.py` prints which way each clip turns (`turns cw` / `ccw`)
+  and `qa_report.py` flags `direction_mismatch` when one clip disagrees with the rest. A
+  menu where one dish spins the other way looks wrong; re-export that clip with
+  `--reverse` (a revolution stays seamless backwards) or reshoot.
 
 ### 8. Per-file overrides, then re-grade only those files
 
@@ -272,8 +310,9 @@ python3 "$S/grade.py" --session "$P/work/session.json" --in "$P/work/photos/IMG_
 
 Override keys: `exposure_ev` (stops, relative), `exposure` (absolute multiplier),
 `wb_gains`, `contrast_strength`, `contrast_midpoint`, `shadows`, `highlights`,
-`saturation`, `crop_ratio`, `straighten_deg`, `crop_center`, `output_long_edge`,
-`background`, `shadow`, and for clips `start`, `duration`, `loop`. Then re-run the sheet
+`saturation`, `crop_ratio`, `straighten_deg`, `crop_center`, `crop_scale`,
+`output_long_edge`, `background`, `shadow`, and for clips `start`, `duration`, `loop`,
+`reverse`. `--file-measure` writes `wb_gains` and `exposure` overrides for you. Then re-run the sheet
 for the affected page. Two rounds of overrides is normal; a third means the session is
 wrong — go back to step 4.
 
@@ -293,7 +332,15 @@ step before the first: seamless when the turntable is steady. `pingpong` plays 5
 forward then backward; use it when a revolution was not found or the dish is symmetric.
 `--stabilize` runs two-pass vidstab for a clip that was bumped. Output: long edge 1920,
 yuv420p, CRF 20, bt709 tags, faststart, no audio, no metadata, timestamps exactly on the
-frame grid.
+frame grid. The console line per clip shows the period, its score, the turning direction
+and any `period_ambiguous` / `period_weak` warning; the same goes to `qa/flags.json`.
+
+`period_ambiguous` means the frame half a turn later matched almost as well as the frame
+a full turn later. A plain round plate or two identical items really are 2-fold
+symmetric and loop at half the true period; a round dish lit from one side can trip the
+test without being symmetric. Decide with numbers, not by squinting at the grid:
+`loop_period.py` prints `score` and `score_half_period`; when they are within a few
+hundredths, cut the clip at twice the found period (`--duration`) or use `pingpong`.
 
 An HDR clip (`hdr_source` in the flags: HLG or PQ, which is what a phone writes with HDR
 video on — Dolby Vision on an iPhone, HDR10+ on most Android phones) is refused per clip.
@@ -389,7 +436,13 @@ Blur and offset of the shadow are in pixels at 1600 px and scale with the output
 - **Do not hand-edit `exposure` after changing the curve.** `calibrate.py` solves exposure
   through the tone curve; change the look through its flags so the card stays on target.
 - **Viewing an image costs tokens and is not deterministic.** That is why the sheets exist.
-  If you find yourself opening single files, stop and make a sheet.
+  If you find yourself opening single files, stop and make a sheet. Two references, two
+  variants sheets, one cutout sheet and the graded sheets is a whole session's budget of
+  looks; a run that opened seventeen files judged seventeen times.
+- **"Consistent" is measured, not felt.** After grading, the `Y50` column on the sheet
+  and in `qa/grade_stats.json` should sit within about 0.1 of the reference for every
+  dish that was lit the same way. A spread of 0.4 means the light differed and the files
+  need their own measurements (`--file-measure`), not a shared exposure nudge.
 
 ## Model note
 

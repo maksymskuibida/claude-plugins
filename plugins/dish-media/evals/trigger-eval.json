@@ -1,0 +1,82 @@
+[
+  {
+    "query": "ok so I photographed 40 dishes for the new menu on my pixel yesterday, they're in ~/Pictures/menu-oct, some look really yellow. can you make them consistent for the tablets we put on the tables? there's a grey card shot at the start",
+    "should_trigger": true
+  },
+  {
+    "query": "Prepare the menu media for the tablets from ~/shoot-2026-10-03 (photos + turntable clips). Same setup as last time.",
+    "should_trigger": true
+  },
+  {
+    "query": "the turntable clips in raw/video don't loop cleanly, there's a jump when it restarts. make them loop properly and export for android tablets",
+    "should_trigger": true
+  },
+  {
+    "query": "grade the dish photos in /Volumes/SD/DCIM/100APPLE — white balance is off and the plates look grey, we need them for the ordering app",
+    "should_trigger": true
+  },
+  {
+    "query": "calibrate the shoot: card frame is IMG_2201.HEIC, dishes are IMG_2202 to IMG_2260, project folder ~/menus/osteria",
+    "should_trigger": true
+  },
+  {
+    "query": "check the contact sheet in qa/sheets/sheet-03.jpg and tell me which dishes need an override",
+    "should_trigger": true
+  },
+  {
+    "query": "cut every dish in out/photos out onto a plain #F6F4EF background with a soft shadow, flag the ones where the mask looks wrong (there's a lot of glassware)",
+    "should_trigger": true
+  },
+  {
+    "query": "my restaurant client sent 120 HEIC photos and 60 .mov clips of dishes rotating on a lazy susan. need sRGB jpegs + mp4 loops that play on cheap tablets, all looking like one set. how do we do this?",
+    "should_trigger": true
+  },
+  {
+    "query": "one of the rotation videos was shot with HDR on and looks washed out grey on the tablet, fix it and redo its loop",
+    "should_trigger": true
+  },
+  {
+    "query": "/dish-media qa",
+    "should_trigger": true
+  },
+  {
+    "query": "make this burger photo look more appetising, add some steam and make the cheese glossier, it's for our instagram",
+    "should_trigger": false
+  },
+  {
+    "query": "remove the fork and the napkin from IMG_0412.jpg and fill in the tablecloth",
+    "should_trigger": false
+  },
+  {
+    "query": "generate a 360 spin video of this pizza from the one photo I have, we didn't film it",
+    "should_trigger": false
+  },
+  {
+    "query": "batch convert the wedding photos in ~/Pictures/wedding from HEIC to JPEG and resize them to 2000px for the client gallery",
+    "should_trigger": false
+  },
+  {
+    "query": "colour grade my travel vlog footage in DaVinci Resolve to a teal and orange look, 10 clips, 4k",
+    "should_trigger": false
+  },
+  {
+    "query": "write the menu descriptions for these 30 dishes, short and appetising, in German and English",
+    "should_trigger": false
+  },
+  {
+    "query": "our tablet ordering app shows the dish images stretched, the ImageView aspect ratio is wrong in the Android layout xml",
+    "should_trigger": false
+  },
+  {
+    "query": "loop this drone clip of the restaurant terrace as a background video for the website hero, 10 seconds, muted",
+    "should_trigger": false
+  },
+  {
+    "query": "my product photos of watches need a white background and a reflection for amazon listings, 200 images",
+    "should_trigger": false
+  },
+  {
+    "query": "what turntable and lights should I buy for shooting dishes at home? budget 300 euro",
+    "should_trigger": false
+  }
+]

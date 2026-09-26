@@ -47,9 +47,14 @@ def apply_geometry(img: np.ndarray, p: dict) -> np.ndarray:
     if angle:
         m = cv2.getRotationMatrix2D((w / 2.0, h / 2.0), angle, 1.0)
         img = cv2.warpAffine(img, m, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
+    if aspect is not None and (h > w) != (aspect < 1):
+        aspect = 1.0 / aspect          # "4:3" means long:short, whichever way the photo stands
     hw, hh = inscribed_rect(w, h, angle, aspect)
+    cs = min(1.0, max(0.3, float(p.get("crop_scale") or 1.0)))
+    hw, hh = hw * cs, hh * cs          # < 1 crops away edges (a watermark, a neighbour's plate)
     cx, cy = p.get("crop_center") or [0.5, 0.5]
-    # the centre may move only as far as keeps the crop inside the valid area
+    # the centre may move only as far as keeps the crop inside the valid area;
+    # a straightened image keeps the crop centred (its valid area is not a rectangle)
     cx = min(max(float(cx) * w, hw), w - hw) if angle == 0 else w / 2.0
     cy = min(max(float(cy) * h, hh), h - hh) if angle == 0 else h / 2.0
     x0, y0 = int(round(cx - hw)), int(round(cy - hh))
@@ -130,6 +135,12 @@ def main() -> int:
     if not files:
         C.die(f"no images in {args.inp}")
     jobs = []
+    skipped = [src.name for src in files if C.is_excluded(session, src.name)]
+    if skipped:
+        C.log(f"  excluded by the session: {', '.join(skipped)}")
+    files = [src for src in files if not C.is_excluded(session, src.name)]
+    if not files:
+        C.die("every input is on the session's exclude list")
     for src in files:
         p = C.params_for(session, src.name)
         p["_overridden"] = C.stem_of(src.name) in {C.stem_of(k) for k in session.get("overrides", {})}

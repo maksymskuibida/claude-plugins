@@ -89,7 +89,7 @@ def main() -> int:
     check(abs(session["exposure"] - 1.0 / truth["under"]) < 0.35, f"derived exposure x{session['exposure']:.3f} is near the +1 EV that was taken away")
 
     print("grade")
-    clean = [n for n, d in truth["dishes"].items() if d["ev"] == 0 and d["tilt_deg"] == 0 and not n.startswith("dish-005")]
+    clean = [n for n, d in truth["dishes"].items() if d["ev"] == 0 and d["tilt_deg"] == 0 and not d.get("portrait") and not n.startswith("dish-005")]
     for name in clean:
         out = P / "out" / "photos" / (Path(name).stem + ".jpg")
         mean = card_in_output(out, truth)
@@ -109,6 +109,18 @@ def main() -> int:
         check(abs(mean.mean() - target) / target <= 0.04, f"exposure_ev=-0.5 override brings dish-004's card back to target ({mean.mean():.1f})")
     var = sorted((P / "qa" / "variants").glob("dish-001__*.jpg"))
     check(len(var) == 6, f"grade.py --variants wrote 6 renders ({len(var)})")
+    with Image.open(P / "out" / "photos" / "dish-006.jpg") as im:
+        check(im.size[1] > im.size[0] and abs(im.size[1] / im.size[0] - 4 / 3) < 0.01, f"portrait dish keeps a 3:4 upright crop, not a 4:3 slice ({im.size})")
+    fm = P / "out" / "photos-filemeasure"
+    sess_fm = C.load_session(P / "work" / "session-filemeasure.json")
+    check("dish-004" in sess_fm["overrides"] and "wb_gains" in sess_fm["overrides"]["dish-004"], "--file-measure stored own gains and exposure as an override")
+    if (fm / "dish-004.jpg").is_file():
+        # dish-004 is +0.5 EV in the raw; its own card measurement must land it on target like the others
+        mean = card_in_output(fm / "dish-004.jpg", truth)
+        check(abs(mean.mean() - target) / target <= 0.03 and max(abs(mean[0] - mean[1]), abs(mean[2] - mean[1])) <= 2.0,
+              f"--file-measure brings the outlier's card to target and neutral ({mean.round(1)})")
+    check(not (fm / "dish-002.jpg").is_file() and (fm / "dish-001.jpg").is_file(), "an excluded file is skipped by grade.py, the others are not")
+    check(sess_fm["provenance"].get("predicted_card_srgb255") is not None, "--from keeps the predicted card in provenance")
 
     print("contact sheets")
     for sheet in sorted((P / "qa" / "sheets").glob("*.jpg")) + [P / "qa" / "variants.jpg"]:
@@ -136,6 +148,11 @@ def main() -> int:
     check(per["period_s"] is not None and abs(per["period_s"] - truth["video"]["period_s"]) <= 0.1,
           f"loop_period.py found {per['period_s']} s (truth {truth['video']['period_s']} s, score {per['score']})")
     vst = json.loads((P / "qa" / "video_stats.json").read_text())
+    check(vst.get("turn-001", {}).get("direction") == "ccw", f"the synthetic disc is reported turning ccw ({vst.get('turn-001', {}).get('direction')})")
+    check(vst.get("turn-001-rev", {}).get("direction") == "cw", f"--reverse flips the reported direction to cw ({vst.get('turn-001-rev', {}).get('direction')})")
+    check(any(f["code"] == "direction_mismatch" and f["file"] == "turn-001-rev.mp4" for f in flags), "qa_report flags the one loop that turns the other way")
+    e = vst.get("turn-001-rev") or {}
+    check(e.get("seam_similarity") is not None and e["seam_similarity"] >= 0.95, f"a reversed revolution still loops ({e.get('seam_similarity')})")
     for stem, loop in (("turn-001", "revolution"), ("turn-001-pp", "pingpong")):
         e = vst.get(stem) or {}
         check(e.get("loop") == loop, f"{stem}: exported as {loop}")

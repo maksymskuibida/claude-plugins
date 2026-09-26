@@ -42,9 +42,9 @@ DEFAULT_LOOK = {
 OVERRIDE_KEYS = {
     "exposure", "exposure_ev", "wb_gains", "contrast_strength", "contrast_midpoint",
     "shadows", "highlights", "saturation", "crop_ratio", "straighten_deg",
-    "crop_center", "output_long_edge", "background", "shadow",
+    "crop_center", "crop_scale", "output_long_edge", "background", "shadow",
     # video-only
-    "start", "duration", "loop",
+    "start", "duration", "loop", "reverse",
 }
 
 
@@ -216,6 +216,7 @@ def write_cube_lut(path: Path, look: dict, size: int = 33, title: str = "dish-me
 def default_session() -> dict:
     s = {"schema": SESSION_SCHEMA, "provenance": {}, "wb_gains": [1.0, 1.0, 1.0], "exposure": 1.0}
     s.update(json.loads(json.dumps(DEFAULT_LOOK)))
+    s["exclude"] = []
     s["overrides"] = {}
     return s
 
@@ -251,8 +252,9 @@ def stem_of(name) -> str:
 
 def params_for(session: dict, filename) -> dict:
     """Effective parameters for one file: the session plus its override."""
-    p = json.loads(json.dumps({k: v for k, v in session.items() if k not in ("overrides", "provenance", "schema")}))
+    p = json.loads(json.dumps({k: v for k, v in session.items() if k not in ("overrides", "provenance", "schema", "exclude")}))
     p["crop_center"] = [0.5, 0.5]
+    p["crop_scale"] = 1.0
     stem = stem_of(filename)
     ov = None
     for key, val in (session.get("overrides") or {}).items():
@@ -277,7 +279,13 @@ def params_for(session: dict, filename) -> dict:
     return p
 
 
+def is_excluded(session: dict, filename) -> bool:
+    stem = stem_of(filename)
+    return any(stem_of(x) == stem for x in (session.get("exclude") or []))
+
+
 def parse_ratio(text) -> float | None:
+    """Crop ratio as long:short (4:3 fits landscape and portrait alike)."""
     if text in (None, "", "none", "null"):
         return None
     if isinstance(text, (int, float)):

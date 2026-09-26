@@ -71,6 +71,11 @@ run_pipeline() {  # PROJECT SESSION_SOURCE(optional)
   # a per-file override rendered on its own, the way an outlier is fixed
   python3 "$S/calibrate.py" --from "$D/work/session.json" --out "$D/work/session-override.json" --override dish-004 exposure_ev=-0.5 2>/dev/null
   python3 "$S/grade.py" --session "$D/work/session-override.json" --in "$D/work/photos/dish-004.jpg" --out "$D/out/photos-override" 2>/dev/null
+  # the same outlier fixed from its own card measurement (--file-measure), and a non-dish excluded
+  python3 "$S/measure.py" "$D/work/photos/dish-004.jpg" --card 180,1380,360,300 --out "$D/work/measure/dish-004.json" 2>/dev/null
+  python3 "$S/calibrate.py" --from "$D/work/session.json" --out "$D/work/session-filemeasure.json" \
+    --file-measure dish-004 "$D/work/measure/dish-004.json" --exclude dish-002 2>/dev/null
+  python3 "$S/grade.py" --session "$D/work/session-filemeasure.json" --in "$D/work/photos" --out "$D/out/photos-filemeasure" 2>/dev/null
   if [ "$skip_cutout" = 0 ]; then
     python3 "$S/cutout.py" --session "$D/work/session.json" --in "$D/out/photos" --out "$D/out/cutouts" --mattes "$D/work/mattes" --qa "$D/qa" 2>/dev/null
     python3 "$S/contact_sheet.py" --in "$D/out/cutouts" --out "$D/qa/sheets-cutouts" --stats "$D/qa/cutout_stats.json" 2>/dev/null
@@ -80,10 +85,11 @@ run_pipeline() {  # PROJECT SESSION_SOURCE(optional)
   python3 "$S/video_grade.py" --session "$D/work/session.json" --in "$D/raw/video" --out "$D/out/loops" --qa "$D/qa" >/dev/null 2>&1 || true
   cp "$D/qa/flags.json" "$D/qa/flags-after-batch.json"   # the HDR failure flag, before the repair below clears it
   bash "$S/video_loop.sh" "$D/work/session.json" "$D/raw/video/turn-001.mov" "$D/out/loops/turn-001-pp.mp4" pingpong 1.0 5.0 >/dev/null 2>&1
+  python3 "$S/video_grade.py" --session "$D/work/session.json" --in "$D/raw/video/turn-001.mov" --out "$D/out/loops/turn-001-rev.mp4" --reverse --qa "$D/qa" >/dev/null 2>&1
   mkdir -p "$D/work/sdr"
   bash "$S/tonemap_hdr.sh" "$D/raw/video/hdr-001.mov" "$D/work/sdr/hdr-001.mov" 2>/dev/null
   python3 "$S/video_grade.py" --session "$D/work/session.json" --in "$D/work/sdr/hdr-001.mov" --out "$D/out/loops/hdr-001.mp4" --loop pingpong --duration 2 --qa "$D/qa" >/dev/null 2>&1
-  for clip in turn-001 turn-001-pp hdr-001; do
+  for clip in turn-001 turn-001-pp turn-001-rev hdr-001; do
     python3 "$S/frame_grid.py" "$D/out/loops/$clip.mp4" --out "$D/qa/grids/$clip.jpg" --qa "$D/qa" >/dev/null 2>&1
   done
   python3 "$S/qa_report.py" --project "$D" >/dev/null 2>&1 || true

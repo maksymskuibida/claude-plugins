@@ -8,6 +8,10 @@ Every frame after start+min-period is compared with the frame at --start
 one revolution later. Prints JSON. A dish with 2-fold symmetry (a plain
 round plate, two identical items) can match at half a turn; the JSON
 warns when the half-period score is nearly as good as the best.
+
+The JSON also says which way the dish turns on screen (`direction`: cw or
+ccw, from dense optical flow around the frame centre) so every loop on a
+menu can be checked to turn the same way.
 """
 from __future__ import annotations
 
@@ -22,32 +26,68 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
 
 
-def read_frames(path: Path, width: int = 160):
+def read_frames(path: Path, width: int = 160, flow_width: int = 320):
+    """Normalised 160 px vectors for matching, plus 320 px greys for optical flow."""
     import cv2
     cap = cv2.VideoCapture(str(path))
     if not cap.isOpened():
         C.die(f"cannot open {path}")
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    frames = []
+    frames, greys = [], []
     while True:
         ok, frame = cap.read()
         if not ok:
             break
         g = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         h = max(8, round(g.shape[0] * width / g.shape[1]))
-        g = cv2.resize(g, (width, h), interpolation=cv2.INTER_AREA).astype(np.float32)
-        g -= g.mean()
-        n = float(np.linalg.norm(g))
-        frames.append((g / n).ravel() if n > 0 else g.ravel())
+        s = cv2.resize(g, (width, h), interpolation=cv2.INTER_AREA).astype(np.float32)
+        s -= s.mean()
+        n = float(np.linalg.norm(s))
+        frames.append((s / n).ravel() if n > 0 else s.ravel())
+        fh = max(8, round(g.shape[0] * flow_width / g.shape[1]))
+        greys.append(cv2.resize(g, (flow_width, fh), interpolation=cv2.INTER_AREA))
     cap.release()
     if not frames:
         C.die(f"no frames decoded from {path}")
-    return float(fps), np.stack(frames)
+    return float(fps), np.stack(frames), greys
+
+
+def rotation_direction(greys: list, start: int, count: int, step: int = 3) -> tuple[str, float]:
+    """Sense of rotation on screen from the mean tangential optical flow
+    around the frame centre: ("cw" | "ccw" | "none", consistency 0..1).
+
+    Image y runs downward, so a positive tangential component (angle
+    increasing) is clockwise as displayed. Only pixels that move are
+    counted, and only inside the central disc where the dish sits."""
+    import cv2
+    h, w = greys[0].shape
+    cx, cy = w / 2.0, h / 2.0
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    dx, dy = xx - cx, yy - cy
+    r = np.hypot(dx, dy) + 1e-6
+    disc = (r < 0.45 * min(w, h)) & (r > 0.05 * min(w, h))
+    signs = []
+    end = min(len(greys) - step, start + count)
+    for i in range(start, end, step):
+        flow = cv2.calcOpticalFlowFarneback(greys[i], greys[i + step], None, 0.5, 3, 21, 3, 5, 1.2, 0)
+        u, v = flow[..., 0], flow[..., 1]
+        mag = np.hypot(u, v)
+        moving = disc & (mag > 0.3)
+        if moving.sum() < 50:
+            continue
+        tangential = (-dy * u + dx * v) / r          # + means angle increasing = clockwise on screen
+        signs.append(float(np.sign(tangential[moving].mean())))
+    if not signs:
+        return "none", 0.0
+    s = float(np.mean(signs))
+    if abs(s) < 0.5:
+        return "none", round(abs(s), 3)
+    return ("cw" if s > 0 else "ccw"), round(abs(s), 3)
 
 
 def detect(path, start: float = 1.0, min_period: float = 4.0, max_period: float = 20.0) -> dict:
     path = Path(path)
-    fps, vecs = read_frames(path)
+    fps, vecs, greys = read_frames(path)
     n = len(vecs)
     ref = int(round(start * fps))
     if ref >= n:
@@ -77,12 +117,14 @@ def detect(path, start: float = 1.0, min_period: float = 4.0, max_period: float 
     half_score = float(vecs[ref + half] @ vecs[ref]) if half >= 1 else None
     if score < 0.6:
         warnings.append(f"best match is weak ({score:.2f}); is the turntable turning, and does one turn fit in the clip?")
-    if half_score is not None and half_score > 0.9 * score and half_score > 0.8:
+    if half_score is not None and half_score > 0.97 * score and half_score > 0.8:
         warnings.append(f"half-period frame matches almost as well ({half_score:.2f} vs {score:.2f}); the dish may be 2-fold symmetric, check the loop")
+    direction, consistency = rotation_direction(greys, ref, pf)
     result.update({
         "period_frames": pf, "period_s": round(pf / fps, 4), "period_s_refined": round(refined / fps, 4),
         "score": round(score, 4), "score_half_period": round(half_score, 4) if half_score is not None else None,
         "revolution_start_s": round(ref / fps, 4), "revolution_end_s": round((ref + pf) / fps, 4),
+        "direction": direction, "direction_consistency": consistency,
         "warnings": warnings,
     })
     return result

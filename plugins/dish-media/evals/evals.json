@@ -1,0 +1,66 @@
+{
+  "skill_name": "dish-media",
+  "evals": [
+    {
+      "id": 1,
+      "name": "session-with-card",
+      "prompt": "I shot the first batch of dishes for our tablet menu yesterday on my phone: 11 dish photos and 2 turntable clips are in <inputs>/session-with-card/raw (photos/ and video/). IMG_0001.jpg is the grey card frame I took first under the same light; IMG_0006 came out as HEIC for some reason. Please prepare the menu media for the tablets — the photos and the loops — and tell me which shots I should redo. Don't touch the originals; build the project in <outputs>/project.",
+      "expected_output": "A calibrated session from the card frame, graded sRGB JPEGs for every photo (HEIC included), two seamless SDR loops, contact sheets and frame grids used for QA, a QA report, a delivery folder, and a short list of shots to redo with reasons (hand, chopsticks, drink cans, phone watermark, duplicates).",
+      "files": [
+        "results/data/evals/session-with-card"
+      ],
+      "expectations": [
+        "Every one of the 11 dish photos (IMG_0002..IMG_0012, including the HEIC IMG_0006) has a graded output JPEG",
+        "Delivered photos are JPEG with an sRGB profile or no profile (never Display P3), long edge at most 2560 px, orientation baked in (no EXIF orientation other than 1)",
+        "White balance is derived from the card frame: relative to the raw files, the graded photos' R/G and B/G change by the gains that neutralise the card (within 0.06 / 0.08), and a graded card patch, if delivered uncropped, is neutral within 3/255",
+        "Both turntable clips became SDR H.264 loops: yuv420p, no audio, long edge at most 1920, faststart",
+        "Both loops are seamless: last-frame to first-frame similarity at least 0.95 (normalised cross-correlation of downscaled greyscale frames)",
+        "Each loop is one revolution or a ping-pong: the moon clip (IMG_0013) holds 12.0 s ± 0.3 s and the swift clip (IMG_0014) 10.0 s ± 0.3 s, or the notes state ping-pong was used",
+        "Contact sheets of the graded photos exist (a QA image at most 1568 px on the long edge with several thumbnails) and the notes say they were judged as sheets, not file by file",
+        "A QA report exists that names at least one flagged photo (clipping, exposure outlier, cast, matte) with a reason",
+        "The final answer names specific shots to redo with concrete reasons (hand, chopsticks or spoon in frame, drink cans, phone watermark, near-duplicate angles)",
+        "No original was modified: every file under the read-only input folder has the same checksum after the run"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "no-card-mixed",
+      "prompt": "Our menu photos are a mess: a few from a photographer with a proper camera and some from my phone, all in <inputs>/no-card-mixed/raw/photos. We never shot a grey card. Make them look consistent for the tablets and cut the dishes out onto a cream background (#F6F4EF) with a soft shadow. Don't modify the originals; put the project in <outputs>/project.",
+      "expected_output": "An honest handling of the missing card (neutral reference from a white plate or a clearly stated assumption), one look applied to all, cutouts on #F6F4EF with a contact shadow and confidence flags, contact sheets, a report that names the interior shots (khmer_01, khmer_02) as not dish photos and the cross-session exposure/cast outliers, and a statement that photos from different lights cannot truly share one look.",
+      "files": [
+        "results/data/evals/no-card-mixed"
+      ],
+      "expectations": [
+        "Every one of the 7 photos has a graded output JPEG, or is explicitly excluded in the notes with a reason",
+        "Cutouts exist on the requested cream background: the corners of each cutout average within ±4/255 of #F6F4EF",
+        "Each cutout carries a soft contact shadow rather than a hard paste: a band of pixels between 3 and 60 levels darker than the background covers at least 0.5% of the image",
+        "The missing grey card is handled explicitly: the notes state which neutral reference (white plate rim, assumption, auto) set white balance and exposure, and what that costs",
+        "khmer_01 and khmer_02 (dining-room interiors with no dish in frame) are identified as unsuitable for a dish menu and excluded or flagged",
+        "Cross-session differences are reported: exposure or cast outliers are listed, or the notes say photos from different cameras and lights cannot fully share one look",
+        "The delivered set is even: the median luminance (Y50) of the delivered photos spans at most 0.20",
+        "Contact sheets exist (a QA image at most 1568 px with several thumbnails) and were used to judge the batch",
+        "Matte quality is assessed per file: a confidence score or flag per cutout, or per-file matte notes naming the doubtful ones",
+        "No original was modified: every file under the read-only input folder has the same checksum after the run"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "loops-and-hdr",
+      "prompt": "The photos were graded last week; the session file is <inputs>/loops-and-hdr/work/session.json. Now the four turntable clips in <inputs>/loops-and-hdr/raw/video need to become loops for the tablets with the same look as the photos. moon-hdr.mov looks grey and washed out on my laptop, and al92.mov I'm not sure even turns the right way. Originals are read-only; write to <outputs>/project.",
+      "expected_output": "Four H.264 SDR loops at 1080p with the session look baked in via a LUT: moon and swift cut to exactly one revolution (or ping-pong with a stated reason), moon-hdr tone-mapped to SDR first (not merely re-encoded), al92's ambiguous period detected and handled (ping-pong or an explicit duration chosen from the frame grid), frame grids with seam scores, and video QA stats.",
+      "files": [
+        "results/data/evals/loops-and-hdr"
+      ],
+      "expectations": [
+        "Four loops exist (moon, swift, al92, moon-hdr) as H.264 MP4, yuv420p, no audio, long edge at most 1920",
+        "moon and swift loops are seamless: last-frame to first-frame similarity at least 0.95",
+        "moon-hdr was tone-mapped, not merely re-encoded: its loop is tagged bt709 (or untagged SDR) and its mean luminance is within 10% of the moon loop's",
+        "The session look was applied to the clips: relative to the source frame, the loop's B/G rises and R/G falls in the direction of the session's white-balance gains",
+        "al92's ambiguous rotation is handled: the notes mention the ambiguous or symmetric period (or a checked frame grid) and state the chosen loop mode or duration",
+        "Frame grids or equivalent QA images (at most 1568 px) exist for every loop",
+        "Seam or loop-quality scores are recorded for at least three clips (video_stats.json or the notes)",
+        "No original was modified: every file under the read-only input folder has the same checksum after the run"
+      ]
+    }
+  ]
+}

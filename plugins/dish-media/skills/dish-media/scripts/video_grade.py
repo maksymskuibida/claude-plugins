@@ -51,7 +51,8 @@ def look_of(p: dict) -> dict:
     return {k: p[k] for k in LOOK_KEYS}
 
 
-def build_filters(p: dict, info: dict, lut: Path, n_frames: int, loop: str, long_edge: int, stabilize_trf: Path | None) -> str:
+def build_filters(p: dict, info: dict, lut: Path, n_frames: int, loop: str, long_edge: int, stabilize_trf: Path | None,
+                  reverse: bool = False) -> str:
     chain = []
     if not info["transfer"] or not info["matrix"]:
         chain.append("setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv")
@@ -64,6 +65,8 @@ def build_filters(p: dict, info: dict, lut: Path, n_frames: int, loop: str, long
     scale = min(1.0, long_edge / max(w, h))
     ow, oh = int(round(w * scale / 2)) * 2, int(round(h * scale / 2)) * 2
     chain.append(f"scale={ow}:{oh}:flags=lanczos:out_color_matrix=bt709:out_range=tv,format=yuv420p")
+    if reverse:
+        chain.append("reverse")          # the whole segment backwards: a revolution stays a revolution
     vf = ",".join(chain)
     # exact constant-rate timestamps and durations: concat and reverse leave
     # uneven pts and no frame durations, and a last frame without a duration
@@ -82,14 +85,19 @@ def grade_clip(src: Path, dst: Path, session: dict, args, lut_dir: Path, qa: Pat
         raise RuntimeError(f"{src.name} is HDR ({info['transfer']}); run tonemap_hdr.sh on it first (and shoot SDR next time)")
     start = float(p.get("start", args.start) if p.get("start") is not None else args.start)
     loop = p.get("loop") or args.loop
+    reverse = bool(p.get("reverse")) or bool(args.reverse)
     duration = p.get("duration") if p.get("duration") is not None else args.duration
-    entry = {"source": src.name, "loop": loop, "start_s": start, "fps": round(info["fps"], 4),
+    entry = {"source": src.name, "loop": loop, "start_s": start, "reverse": reverse, "fps": round(info["fps"], 4),
              "source_duration_s": round(info["duration"], 3), "source_size": [info["width"], info["height"]]}
     period = None
+    if duration is None or loop == "revolution":
+        period = loop_period.detect(src, start=start, min_period=args.min_period, max_period=args.max_period)
+        entry["period"] = {k: period.get(k) for k in ("period_frames", "period_s", "score", "score_half_period", "warnings")}
+        d = period.get("direction", "none")
+        entry["direction"] = ("ccw" if d == "cw" else "cw") if (reverse and d in ("cw", "ccw")) else d
+        entry["direction_consistency"] = period.get("direction_consistency")
     if duration is None:
         if loop == "revolution":
-            period = loop_period.detect(src, start=start, min_period=args.min_period, max_period=args.max_period)
-            entry["period"] = {k: period.get(k) for k in ("period_frames", "period_s", "score", "score_half_period", "warnings")}
             if not period.get("period_frames"):
                 raise RuntimeError(f"no revolution found in {src.name}: {'; '.join(period.get('warnings', []))}")
             duration = period["period_frames"] / info["fps"]
@@ -117,7 +125,7 @@ def grade_clip(src: Path, dst: Path, session: dict, args, lut_dir: Path, qa: Pat
         r = C.run(common_in + ["-vf", f"vidstabdetect=shakiness=4:accuracy=15:result={trf}", "-f", "null", "-"])
         if r.returncode != 0:
             raise RuntimeError(f"vidstabdetect failed on {src.name}")
-    fc = build_filters(p, info, lut, n_frames, loop, args.long_edge, trf)
+    fc = build_filters(p, info, lut, n_frames, loop, args.long_edge, trf, reverse=reverse)
     dst.parent.mkdir(parents=True, exist_ok=True)
     cmd = common_in + [
         "-filter_complex", fc, "-map", "[v]", "-an",
@@ -147,6 +155,7 @@ def main() -> int:
     ap.add_argument("--min-period", type=float, default=4.0)
     ap.add_argument("--max-period", type=float, default=20.0)
     ap.add_argument("--stabilize", action="store_true", help="two-pass vidstab (rarely needed on a locked-off phone)")
+    ap.add_argument("--reverse", action="store_true", help="play the segment backwards (a clip that turns the other way)")
     ap.add_argument("--long-edge", type=int, default=1920)
     ap.add_argument("--crf", type=int, default=20)
     ap.add_argument("--preset", default="medium")
@@ -179,9 +188,12 @@ def main() -> int:
             msg = f"  {clip.name}: {entry['loop']} start {entry['start_s']}s duration {entry['duration_s']}s ({entry['frames']} frames)"
             if per:
                 msg += f"  period {per.get('period_s')}s score {per.get('score')}"
+            if entry.get("direction"):
+                msg += f"  turns {entry['direction']}"
             C.log(msg)
             for w in per.get("warnings") or []:
                 code = "period_ambiguous" if "symmetric" in w else "period_weak"
+                C.log(f"    warning ({code}): {w}")
                 flags.append({"file": clip.name, "code": code, "detail": w, "hint": "check the frame grid; set an explicit --duration or use pingpong"})
         except RuntimeError as e:
             failed += 1

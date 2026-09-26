@@ -44,8 +44,14 @@ def main() -> int:
         rows = list(csv.DictReader(fh))
     (out / "photos").mkdir(parents=True, exist_ok=True)
     (out / "loops").mkdir(parents=True, exist_ok=True)
-    delivered, missing = [], []
+    session_p = P / "work" / "session.json"
+    excluded = {C.stem_of(x) for x in ((C.load_session(session_p) if session_p.is_file() else {}).get("exclude") or [])}
+    delivered, missing, left_out = [], [], []
     for r in rows:
+        stem_any = C.stem_of(r.get("work_file") or r.get("original_file") or "")
+        if stem_any in excluded:
+            left_out.append(stem_any)
+            continue
         if r.get("kind") == "photo" and r.get("work_file"):
             stem = C.stem_of(r["work_file"])
             src = P / "out" / "cutouts" / f"{stem}.jpg"
@@ -73,7 +79,8 @@ def main() -> int:
         w.writerows(sorted(delivered, key=lambda d: (d["stem"], d["loop"])))
     n_p = sum(1 for d in delivered if d["photo"])
     n_l = sum(1 for d in delivered if d["loop"])
-    C.log(f"delivered {n_p} photos and {n_l} loops -> {out}" + (f"; missing: {', '.join(missing)}" if missing else ""))
+    C.log(f"delivered {n_p} photos and {n_l} loops -> {out}" + (f"; missing: {', '.join(missing)}" if missing else "")
+          + (f"; left out (session exclude): {', '.join(left_out)}" if left_out else ""))
     return 1 if missing else 0
 
 

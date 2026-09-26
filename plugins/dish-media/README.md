@@ -96,7 +96,9 @@ A session, as Claude drives it through the skill (`S` is the skill's `scripts/` 
 
 - **Never generative.** Colour and light are arithmetic on the real pixels; the cutout is a
   segmentation mask; the loop is a cut of the real rotation.
-- **Grey card first**; white balance and exposure are derived, not eyeballed.
+- **Grey card first**; white balance and exposure are derived, not eyeballed. No card:
+  measure a white plate rim instead (`--target-luminance 0.85`), per photo when the
+  sources differ (`--file-measure`).
 - **One parameter set per session** in `work/session.json`; differences between dishes are
   per-file overrides in that file.
 - **Claude judges contact sheets and frame grids only**, never single files, and only the
@@ -112,15 +114,15 @@ A session, as Claude drives it through the skill (`S` is the skill's `scripts/` 
 | `setup.sh` | toolchain check; installs only after printing the plan and asking |
 | `ingest.py` | HEIC/JPEG/PNG → 2400 px sRGB JPEG, orientation normalised, manifest CSV; lists clips and flags HDR ones |
 | `measure.py` | grey-card region (explicit or `--auto`) → mean RGB, R/G, B/G, luminance percentiles, clipping; preview JPEG |
-| `calibrate.py` | measurement + targets → `session.json` (gains, exposure solved through the tone curve, look, overrides) |
+| `calibrate.py` | measurement + targets → `session.json` (gains, exposure solved through the tone curve, look, per-file overrides and measurements, exclude list) |
 | `grade.py` | applies the session: linear light, gains, exposure, tone curve, OKLab saturation, straighten, crop, resize, JPEG q90 + sRGB profile; `--variants` |
 | `cutout.py` | rembg matte → erode/feather → composite on the background with a contact shadow; confidence score and flags |
 | `contact_sheet.py` | 5 × 4 thumbnails with diagnostics, reference first, ≤ 1568 px; `--variants` mode |
-| `loop_period.py` | revolution period by normalised cross-correlation against the reference frame |
+| `loop_period.py` | revolution period by normalised cross-correlation against the reference frame, turning direction from optical flow |
 | `video_grade.py`, `video_loop.sh` | trim, LUT from the session, optional vidstab, `revolution` or `pingpong` loop, 1080p H.264 yuv420p CRF 20 faststart |
 | `tonemap_hdr.sh` | HLG/PQ → SDR bt709 (zscale linear → Hable → bt709) for clips shot in HDR by mistake |
 | `frame_grid.py` | 3 × 3 frames of an exported loop with a seam score, ≤ 1568 px |
-| `qa_report.py` | merges every flag plus batch outliers and missing outputs into `qa/report.md` |
+| `qa_report.py` | merges every flag plus batch outliers, direction mismatches and missing outputs into `qa/report.md` |
 | `deliver.py` | assembles `deliver/` from cutouts or photos and loops; refuses while errors remain |
 
 All Python 3, Pillow, numpy and OpenCV; rembg only for `cutout.py`; ffmpeg for video.
@@ -164,5 +166,10 @@ importable and the cutout checks are skipped otherwise (`--skip-cutout`).
 - **The loop jumps at the seam** — the dish is symmetric (`period_ambiguous`), or the
   turntable was still accelerating at `--start`. Set `--start 2` or `--duration` to the
   full turn read off the grid, or use `--loop pingpong`.
+- **One loop turns the other way** — `qa/report.md` says `direction_mismatch`; re-export
+  that clip with `video_grade.py --reverse`.
+- **A photo is not a dish (interior, table shot, the card frame)** — put it on the
+  session's exclude list: `calibrate.py --from … --exclude IMG_0008`; grading, the report
+  and delivery skip it.
 - **Outputs changed between runs** — they do not, given the same inputs and session. Diff
   `work/session.json`; someone re-calibrated.
