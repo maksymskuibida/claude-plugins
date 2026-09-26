@@ -1,0 +1,7 @@
+{
+  "name": "dish-media",
+  "displayName": "Dish Media",
+  "version": "1.0.0",
+  "description": "Grade iPhone dish photos and loop turntable clips for restaurant menu tablets: grey-card calibration, one deterministic look per session, contact-sheet QA, no generative AI.",
+  "author": { "name": "Maksym Skuibida" }
+}

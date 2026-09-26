@@ -1,0 +1,7 @@
+# dish-media: Python side of the pipeline. ffmpeg/ffprobe come from Homebrew.
+Pillow>=10.1
+numpy>=1.26
+opencv-python-headless>=4.8
+rembg[cpu]>=2.0.60
+# only where `sips` is not available (i.e. not on macOS)
+pillow-heif>=0.16; sys_platform != "darwin"
