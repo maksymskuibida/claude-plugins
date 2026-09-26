@@ -126,8 +126,10 @@ def main() -> int:
         corner = a[:20, -20:].reshape(-1, 3).mean(axis=0)
         bg = np.array(C.parse_colour(session["background"]))
         check(np.abs(corner - bg).max() <= 3, f"cutout corner is the background colour ({corner.round(1)} vs {bg})")
-        check(any(f["code"] == "matte_low_confidence" for f in flags) or all(st["confidence"] >= 0.6 for st in cst.values()),
-              "low-confidence mattes are flagged (or none are low)")
+        low = {stem for stem, st in cst.items() if st["confidence"] < 0.8}
+        flagged = {C.stem_of(f["file"]) for f in flags if f["code"] == "matte_low_confidence"}
+        check(low == flagged, f"every matte under 0.8 is flagged and nothing else is ({sorted(low)} vs {sorted(flagged)})")
+        check(any(st.get("ghost", 0) > 0.01 for st in cst.values()), "the ghost check sees the faint grey card the model half-keeps in the fixtures")
 
     print("video")
     per = json.loads((P / "qa" / "period.json").read_text())

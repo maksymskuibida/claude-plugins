@@ -130,7 +130,7 @@ def main() -> int:
     ap.add_argument("--background", help="#RRGGBB, overrides the session")
     ap.add_argument("--erode", type=float, default=1.0, help="pixels to shrink the matte (kills the fringe)")
     ap.add_argument("--feather", type=float, default=1.5, help="Gaussian sigma on the matte edge")
-    ap.add_argument("--min-confidence", type=float, default=0.6)
+    ap.add_argument("--min-confidence", type=float, default=0.8, help="flag below this; any one full-strength defect drops the score under it")
     ap.add_argument("--reuse-mattes", action="store_true", help="read mattes from --mattes instead of running the model")
     args = ap.parse_args()
 

@@ -212,7 +212,8 @@ rembg (`isnet-general-use`, falling back to `u2net`) gives the matte; it is erod
 pixel and feathered, composited in linear light, and a contact shadow is made from the
 blurred, offset alpha with the session's `shadow` settings. Every file gets a confidence
 score from alpha coverage, soft-edge area, holes, border contact and faint ghosts away
-from the dish; below 0.6 it is flagged `matte_low_confidence`. Glass, steam, thin herbs
+from the dish; below 0.8 it is flagged `matte_low_confidence`, so any one clear defect
+puts the file on the list. Glass, steam, thin herbs
 and cutlery are the usual reasons. `--reuse-mattes` recomposites after a change of
 background or shadow without running the model again.
 
