@@ -296,7 +296,8 @@ yuv420p, CRF 20, bt709 tags, faststart, no audio, no metadata, timestamps exactl
 frame grid.
 
 An HDR clip (`hdr_source` in the flags: HLG or PQ, which is what a phone writes with HDR
-video on — Dolby Vision on an iPhone, HDR10+ on most Android phones) is refused per clip. Tone-map it first, then grade the SDR intermediate:
+video on — Dolby Vision on an iPhone, HDR10+ on most Android phones) is refused per clip.
+Tone-map it first, then grade the SDR intermediate:
 
 ```bash
 bash "$S/tonemap_hdr.sh" "$P/raw/video/IMG_0013.mov" "$P/work/sdr/IMG_0013.mov"

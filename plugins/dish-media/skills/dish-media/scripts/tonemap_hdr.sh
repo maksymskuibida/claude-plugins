@@ -13,7 +13,7 @@
 set -euo pipefail
 
 if [ $# -lt 2 ]; then
-  sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 fi
 in="$1"; out="$2"; mode="${3:-auto}"
