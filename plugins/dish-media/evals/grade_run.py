@@ -447,6 +447,134 @@ def main() -> int:
         res["session_look_applied"] = (look_ok, note)
         res["originals_untouched"] = (checksums_ok(name), "checksums compared with the pre-run list")
 
+    elif name == "amateur-menu":
+        T = TRUTH["amateur-menu"]
+        stems = [Path(n).stem for n in T["photos"]]
+        graded = find_graded(out, stems)
+        sess = next(iter(out.rglob("session.json")), None)
+        excl = set()
+        if sess:
+            try:
+                excl = {C.stem_of(x) for x in (json.loads(sess.read_text()).get("exclude") or [])}
+            except json.JSONDecodeError:
+                pass
+        excluded = [st for st in stems if st not in graded and (st in excl or re.search(st + r".{0,200}(exclud|reshoot|unusable|not a dish|leave out|left out|packag|exterior|street)", notes, re.I | re.S))]
+        res["all_graded_or_excluded"] = (len(graded) + len(excluded) == len(stems), f"graded {len(graded)}/{len(stems)}; excluded with a reason: {excluded}")
+        bad = []
+        for st, pth in graded.items():
+            with Image.open(pth) as im:
+                icc = im.info.get("icc_profile"); ok_icc = True
+                if icc:
+                    from PIL import ImageCms
+                    import io
+                    ok_icc = "srgb" in ImageCms.getProfileDescription(ImageCms.ImageCmsProfile(io.BytesIO(icc))).lower()
+                if im.format != "JPEG" or not ok_icc or max(im.size) > 2560 or im.getexif().get(274, 1) not in (None, 1):
+                    bad.append(pth.name)
+        res["delivery_format"] = (bool(graded) and not bad, "; ".join(bad) or f"{len(graded)} files JPEG/sRGB/<=2560/orientation ok")
+        deliver = next((d for d in (out / "project" / "deliver" / "photos", out / "project" / "delivery") if d.is_dir() and list(d.glob("*.jpg"))), None)
+        delivered = sorted(deliver.glob("*.jpg")) if deliver else [graded[st] for st in sorted(graded)]
+
+        def plate_rb(rgb8):
+            lin = C.srgb_to_linear(rgb8.astype(np.float32) / 255.0)
+            y = lin @ C.LUMA_709
+            chroma = np.abs(lin[..., 0] / np.maximum(lin[..., 1], 1e-4) - 1) + np.abs(lin[..., 2] / np.maximum(lin[..., 1], 1e-4) - 1)
+            cand = (y > np.percentile(y, 85)) & (y < 0.92) & (chroma < np.percentile(chroma, 40))
+            m = C.linear_to_srgb(lin[cand].reshape(-1, 3).mean(axis=0)) * 255
+            return float(m[0] - m[2])
+        rb = {pth.stem: round(plate_rb(C.load_rgb8(pth)), 1) for pth in delivered}
+        warm_ok = sum(1 for v in rb.values() if 1.0 <= v <= 12.0)
+        res["plates_warm_not_cold"] = (bool(rb) and warm_ok >= 0.8 * len(rb), f"R-B of the plate whites per photo {json.dumps(rb)}; {warm_ok}/{len(rb)} within +1..+12")
+
+        def subject_median(pth):
+            a = C.load_rgb8(pth); f = a.astype(np.float32) / 255.0
+            return float(np.median(f @ C.LUMA_709))
+        lifted = {}
+        for n in T["dark"]:
+            st = Path(n).stem
+            if st in graded:
+                lifted[st] = (round(subject_median(INPUTS / name / "raw" / "photos" / n), 3), round(subject_median(graded[st]), 3))
+        res["dark_frames_lifted"] = (bool(lifted) and all(b - a >= 0.08 for a, b in lifted.values()), f"source -> graded Y50 {json.dumps(lifted)}")
+        p95 = {pth.stem: C.image_stats(C.load_rgb8(pth))["y_p95"] for pth in delivered}
+        spread = (max(p95.values()) - min(p95.values())) if p95 else 9
+        res["batch_even"] = (bool(p95) and spread <= 0.20, f"plate p95 per photo spread {spread:.2f} (limit 0.20)")
+        import cutout as CO
+        model, _ = CO.load_model(CO.DEFAULT_MODEL)
+        cuts = {}
+        for pth in delivered:
+            src = INPUTS / name / "raw" / "photos" / f"{pth.stem}.jpg"
+            a_out = CO.confidence(CO.matte_for(C.load_rgb8(pth), model))[1]["border_touch"]
+            a_src = CO.confidence(CO.matte_for(C.load_rgb8(src), model))[1]["border_touch"] if src.is_file() else 0.0
+            cuts[pth.stem] = (round(a_out, 3), round(a_src, 3))
+        bad_cut = [k for k, (o, s_) in cuts.items() if o > 0.01 and o > s_ + 0.005]
+        res["vessel_whole"] = (bool(cuts) and not bad_cut, f"cut worse than source: {bad_cut}; per photo out/src {json.dumps(cuts)}")
+        nd = [Path(n).stem for n in T["not_a_dish"]]
+        nd_ok = all(st in excluded or st not in {d.stem for d in delivered} or re.search(st + r".{0,200}(not a dish|exterior|street|packag|exclud|leave out)", notes, re.I | re.S) for st in nd)
+        res["non_dish_excluded"] = (nd_ok, f"{nd} delivered? {[st for st in nd if st in {d.stem for d in delivered}]}")
+        sheets = [q for q in jpgs(out) if "sheet" in q.parent.name or "sheet" in q.name.lower() or "survey" in q.name.lower()]
+        sizes = {}
+        for q in sheets:
+            with Image.open(q) as im:
+                sizes[q.name] = im.size
+        res["contact_sheets"] = (bool(sizes) and all(max(v) <= 1568 for v in sizes.values()) and bool(re.search(r"sheet", notes, re.I)), json.dumps(sizes))
+        rep = list(out.rglob("report.md"))
+        txt = rep[0].read_text() if rep else ""
+        res["qa_report"] = (bool(rep) and bool(re.search(r"`\w+`", txt)), rep[0].relative_to(out).as_posix() if rep else "no report.md")
+        res["originals_untouched"] = (checksums_ok(name), "checksums compared with the pre-run list")
+
+    elif name == "amateur-clips":
+        T = TRUTH["amateur-clips"]
+        dish = [Path(c).stem for c in T["dish_clips"]]
+        nond = [Path(c).stem for c in T["not_a_dish"]]
+        loops = {st: next((q for q in mp4s(out) if q.stem == st), None) for st in dish + nond}
+        vs = next(iter(out.rglob("video_stats.json")), None)
+        vstats = json.loads(vs.read_text()) if vs else {}
+        info = {k: probe(v) for k, v in loops.items() if v}
+        dish_ok = all((loops.get(st) and info[st]["video"].get("codec_name") == "h264" and info[st]["video"].get("pix_fmt") == "yuv420p" and info[st]["audio"] == 0
+                       and max(int(info[st]["video"].get("width", 0)), int(info[st]["video"].get("height", 0))) <= 1920)
+                      or re.search(st + r".{0,300}(left out|exclud|cannot|can't|not usable|unusable)", notes, re.I | re.S) for st in dish)
+        res["dish_clips_delivered_or_declined"] = (dish_ok, json.dumps({k: (v["video"].get("width"), v["video"].get("height"), v["video"].get("pix_fmt"), round(v["duration"], 2)) for k, v in info.items()}))
+        deliver_dir = out / "project" / "deliver" / "loops"
+        delivered = [q.stem for q in deliver_dir.glob("*.mp4")] if deliver_dir.is_dir() else [k for k, v in loops.items() if v and k in dish]
+        modes = {st: (vstats.get(st) or {}).get("loop") for st in delivered}
+        res["no_fake_revolution"] = (bool(delivered) and all(m in ("pingpong", "none") for m in modes.values()), json.dumps(modes))
+        nd_ok = all(loops.get(st) is None or re.search(st + r".{0,300}(exclud|not a dish|people|person|guest|chef|cook|stall|no plated|left out)", notes, re.I | re.S) for st in nond)
+        res["non_dish_excluded"] = (nd_ok, f"non-dish clips rendered: {[st for st in nond if loops.get(st)]}")
+        measures = list(out.rglob("*.json"))
+        sess = next(iter(out.rglob("session.json")), None)
+        ov = {}
+        if sess:
+            try:
+                ov = json.loads(sess.read_text()).get("overrides") or {}
+            except json.JSONDecodeError:
+                pass
+        per_clip = {st: (st in ov and "wb_gains" in ov[st]) or any(m.stem.startswith(st) and "measure" in m.parent.name for m in measures) for st in delivered}
+        res["white_balance_measured_per_clip"] = (bool(per_clip) and all(per_clip.values()), json.dumps(per_clip))
+        import cv2
+
+        def mid_frame(pth: Path):
+            w, h, fps, n = FG.probe(str(pth)); fr = None
+            for i, fr in enumerate(FG.stream_frames(str(pth), w, h)):
+                if i == n // 2:
+                    return fr
+            return fr
+
+        def plate_rb(rgb8):
+            lin = C.srgb_to_linear(rgb8.astype(np.float32) / 255.0)
+            y = lin @ C.LUMA_709
+            chroma = np.abs(lin[..., 0] / np.maximum(lin[..., 1], 1e-4) - 1) + np.abs(lin[..., 2] / np.maximum(lin[..., 1], 1e-4) - 1)
+            cand = (y > np.percentile(y, 85)) & (y < 0.92) & (chroma < np.percentile(chroma, 40))
+            m = C.linear_to_srgb(lin[cand].reshape(-1, 3).mean(axis=0)) * 255
+            return float(m[0] - m[2])
+        rb = {st: round(plate_rb(mid_frame(loops[st])), 1) for st in delivered if loops.get(st)}
+        res["clips_warm_not_cold"] = (bool(rb) and all(1.0 <= v <= 14.0 for v in rb.values()), f"R-B of bright whites in a middle frame {json.dumps(rb)}")
+        grids = [q for q in jpgs(out) if "grid" in q.parent.name or "grid" in q.name.lower()]
+        sizes = {}
+        for q in grids:
+            with Image.open(q) as im:
+                sizes[q.name] = im.size
+        res["frame_grids"] = (len(sizes) >= len(delivered) and bool(delivered) and all(max(v) <= 1568 for v in sizes.values()), json.dumps(sizes))
+        res["originals_untouched"] = (checksums_ok(name), "checksums compared with the pre-run list")
+
     print(json.dumps({k: {"passed": bool(v[0]), "evidence": v[1]} for k, v in res.items()}, indent=2))
     return 0
 

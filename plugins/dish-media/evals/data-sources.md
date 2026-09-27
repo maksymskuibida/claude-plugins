@@ -15,6 +15,9 @@ Real files the evals run on, fetched by `fetch_data.py` into the git-ignored
 | `video/al92_rotation.webm` | `Exposed Central Rotation of AL92 (CIRA 2024-06-21 - nolabels).webm` (1080p transcode) | Public domain |
 | `pattaya/*.jpg` (15) | `DFC 1093 …`, `DFC 5021 …`, `DFC 1025 …`, `DFC 1238 …`, `DFC 1493 …`, `DFC 5103 …`, `DFC 2288 …`, `DFC 5113 …`, `DFC 1021 …`, `DFC 4533 …`, `DFC 3983 …`, `DZ6 1891 …`, `DSCF0811 …`, `DSCF0812 …`, `DFC 0313 …` (single plated dishes by PattayaPatrol; full titles in `fetch_data.py`) | CC BY-SA 4.0 |
 
+| `amateur/*.jpg` (24) | Unedited phone snapshots of restaurant meals by several Commons uploaders (Nando's, Guzman y Gomez, Red Rooster, KFC, NeNe Chicken, Albion and Inglewood hotels, Top Fryz, Kedai Juragan, Griffins Hotel, Pizza Hut Berlin, Pod Siódemką, Oasis Voi, Cafe de Coral, Shenzhen and Zhongshan dinners, Tokyo Italian, Giorgina Wien, Lisbon goat, Mérida dinner, ILiat schnitzel, Kway Teow); full titles in `fetch_data.py` | CC BY-SA 4.0 / CC BY 2.0 / CC0 |
+| `video-amateur/*.webm` (7) | Handheld restaurant phone videos on Commons (Silk Road London ×2, Mujo wagyu, Shima teppanyaki, fast food Seoul, plov, brochettes Lyon), 1080p/720p transcodes | CC BY-SA / CC BY |
+
 Real rotating-food clips (not on Commons), fetched by hand into `results/data/downloads/video-real/`:
 
 | Local name | Source | Licence |

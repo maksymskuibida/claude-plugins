@@ -175,6 +175,24 @@ def main() -> int:
     shutil.copyfile(s3 / "work" / "session.json", s5 / "work" / "session.json")
     truth["loops-real"] = {"clips": list(clips), "not_a_dish": ["cake_with_baker.mov"], "portrait": ["chocolate_cake.mov"],
                            "hdr": ["raspberries-hdr.mov"], "partial_rotation": ["raspberries.mov", "tomato_juice.mov", "baked_dish.mov", "chocolate_cake.mov"]}
+    # --- amateur-menu: unedited phone snapshots, mixed lights, clutter, one exterior ---
+    s6 = out / "amateur-menu"
+    (s6 / "raw" / "photos").mkdir(parents=True)
+    for src in sorted((dl / "amateur").glob("*.jpg")):
+        shutil.copyfile(src, s6 / "raw" / "photos" / src.name)
+    truth["amateur-menu"] = {"photos": [p.name for p in sorted((dl / "amateur").glob("*.jpg"))],
+                             "not_a_dish": ["zhongshan_dinner.jpg", "rippa_box.jpg"],
+                             "dark": ["merida_dinner.jpg", "roast_pork_katowice.jpg", "steak_sandwich.jpg", "short_rib_biryani.jpg", "beef_burger.jpg"]}
+
+    # --- amateur-clips: customers' handheld phone videos, no turntable ---------
+    s7 = out / "amateur-clips"
+    (s7 / "raw" / "photos").mkdir(parents=True)
+    (s7 / "raw" / "video").mkdir(parents=True)
+    for src in sorted((dl / "video-amateur").glob("*.webm")):
+        real_clip(src, s7 / "raw" / "video" / f"{src.stem}.mov")
+    truth["amateur-clips"] = {"clips": [p.stem + ".mov" for p in sorted((dl / "video-amateur").glob("*.webm"))],
+                              "dish_clips": ["double_cooked_pork.mov", "aubergine.mov", "wagyu.mov"],
+                              "not_a_dish": ["fast_food_seoul.mov", "teppanyaki.mov", "plov.mov", "brochettes_lyon.mov"]}
     (out / "truth.json").write_text(json.dumps(truth, indent=2) + "\n")
     for root, _, files in sorted(__import__("os").walk(out)):
         for f in sorted(files):

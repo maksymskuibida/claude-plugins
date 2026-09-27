@@ -102,6 +102,47 @@
         "The session look was applied to the clips: relative to the source frame, a loop's B/G rises and R/G falls in the direction of the session gains",
         "No original was modified: every file under the read-only input folder has the same checksum after the run"
       ]
+    },
+    {
+      "id": 6,
+      "name": "amateur-menu",
+      "prompt": "These are photos of our dishes that staff and customers took with their phones over the year, all in <inputs>/amateur-menu/raw/photos. Nobody edited anything and there is no grey card. Make a tablet menu set out of the usable ones, keep the table showing (no cutouts), and tell me which ones to leave out or reshoot and why. Originals are read-only; build the project in <outputs>/project.",
+      "expected_output": "Per-photo white balance and exposure from a white patch in each frame, the session's warmth kept so plates read warm not clinical, dark frames lifted, crops that keep the whole vessel, the street exterior and the packaging shot excluded with reasons, clutter named for reshoot, contact-sheet QA, a QA report and a delivery folder.",
+      "files": [
+        "results/data/evals/amateur-menu"
+      ],
+      "expectations": [
+        "Every one of the 24 photos has a graded output JPEG, or is excluded with a stated content reason",
+        "Delivered photos are JPEG with an sRGB profile or no profile, long edge at most 2560 px, orientation baked in",
+        "Plates read warm, not cold: in at least 80% of the delivered photos the bright low-chroma pixels have R-B between +1 and +12 (of 255) after correction",
+        "Dark frames are lifted: merida_dinner, roast_pork_katowice, steak_sandwich and short_rib_biryani gain at least 0.08 in subject median luminance versus the source",
+        "The batch is even: the plate brightness (95th-percentile luminance) of the delivered photos spans at most 0.20",
+        "The vessel is whole: no delivered photo cuts the plate (matte touching the frame edge on more than 1% of the border) unless the source already did",
+        "The street exterior (zhongshan_dinner) and the packaging shot (rippa_box) are excluded or named as not dish photos",
+        "Contact sheets exist (a QA image at most 1568 px with several thumbnails) and the notes say they were judged as sheets",
+        "A QA report exists that names at least one flagged photo with a reason",
+        "The final answer names photos to reshoot with concrete reasons (drinks, packaging, wrappers, cutlery clutter, half-eaten, framing)",
+        "No original was modified: every file under the read-only input folder has the same checksum after the run"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "amateur-clips",
+      "prompt": "Customers filmed some of our dishes on their phones, the clips are in <inputs>/amateur-clips/raw/video. There is no photo session and no grey card. Can any of these become loops for the tablets? Don't fake anything: if a clip can't loop honestly, say so and tell me how to shoot it next time. Originals are read-only; write to <outputs>/project.",
+      "expected_output": "The clips are handheld, no turntable: the dish clips (double-cooked pork, aubergine, the wagyu plating) are graded from a white patch measured in their own frames and delivered as SDR H.264 either as short ping-pong loops with the limitation stated or with --loop none, never as a fake revolution; the street stall, the teppanyaki show with guests, the cooking pot and the grill with hands are left out with reasons; a frame grid per delivered clip; a QA report; clear reshoot instructions (locked-off phone, turntable, one turn, no hands).",
+      "files": [
+        "results/data/evals/amateur-clips"
+      ],
+      "expectations": [
+        "The dish clips (double_cooked_pork, aubergine, wagyu) are delivered as SDR H.264 (yuv420p, no audio, long edge at most 1920), or left out with a stated reason",
+        "No delivered clip claims a revolution: video_stats.json shows loop pingpong or none for every delivered clip (there is no turntable in any of them)",
+        "The non-dish clips (fast_food_seoul, teppanyaki, plov, brochettes_lyon) are excluded or flagged with reasons (people, cooking, no plated dish)",
+        "White balance was measured per clip from its own frame (a measure JSON or a per-clip wb_gains override exists for each delivered clip) rather than assumed",
+        "Delivered clips read warm, not cold: in a middle frame the bright low-chroma pixels have R-B between +1 and +14 (of 255)",
+        "A frame grid (at most 1568 px) exists for every delivered clip",
+        "The final answer says plainly that these clips cannot be turntable loops and gives reshoot instructions (locked-off phone, turntable, one full turn, no hands)",
+        "No original was modified: every file under the read-only input folder has the same checksum after the run"
+      ]
     }
   ]
 }
