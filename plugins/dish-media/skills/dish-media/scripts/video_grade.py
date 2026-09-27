@@ -174,8 +174,12 @@ def main() -> int:
         lut_dir = next((c for c in (out_folder.parent.parent / "work", out_folder.parent / "work") if c.is_dir()), out_folder)
     src = Path(args.inp)
     clips = C.list_videos(src)
+    skipped = [c.name for c in clips if C.is_excluded(session, c.name)]
+    if skipped:
+        C.log(f"  excluded by the session: {', '.join(skipped)}")
+    clips = [c for c in clips if not C.is_excluded(session, c.name)]
     if not clips:
-        C.die(f"no clips in {src}")
+        C.die(f"no clips in {src}" if not skipped else "every clip is on the session's exclude list")
     out = Path(args.out)
     single = out.suffix.lower() == ".mp4"
     if single and len(clips) > 1:
@@ -204,10 +208,9 @@ def main() -> int:
             C.log(f"  ! {e}")
             flags.append({"file": clip.name, "code": "video_failed", "severity": "error", "detail": str(e)})
     if qa and not args.dry_run:
-        p = qa / "video_stats.json"
-        existing = json.loads(p.read_text()) if p.is_file() else {}
-        merged = {k: {**(existing.get(k) or {}), **v} for k, v in stats.items()}
-        C.update_stats(p, merged)
+        # a clip's entry is replaced, not merged: a re-run with an explicit duration must not
+        # keep the period and direction fields of an earlier detection
+        C.update_stats(qa / "video_stats.json", stats)
         C.write_flags(qa, "video", [c.name for c in clips], flags)
     C.log(f"{len(stats)} clip(s) done, {failed} failed -> {out}")
     return 1 if failed else 0

@@ -79,6 +79,7 @@ def main() -> int:
     ap.add_argument("run_outputs")
     ap.add_argument("--out", required=True)
     ap.add_argument("--max-rows", type=int, default=5)
+    ap.add_argument("--offset", type=int, default=0, help="skip this many dishes/clips first (for paging)")
     ap.add_argument("--title", default="")
     args = ap.parse_args()
     out_dir = Path(args.run_outputs)
@@ -90,7 +91,7 @@ def main() -> int:
         graded_dir = proj / "out" / "photos"
         cut_dir = proj / "out" / "cutouts"
         stems = [p.stem for p in sorted(deliver.glob("*.jpg"))] if deliver.is_dir() else [p.stem for p in sorted(graded_dir.glob("*.jpg"))]
-        for stem in stems[: args.max_rows]:
+        for stem in stems[args.offset: args.offset + args.max_rows]:
             work = proj / "work" / "photos" / f"{stem}.jpg"      # the ingested copy: the original, only resized to sRGB
             raw = work if work.is_file() else next((p for p in raw_dir.iterdir() if p.stem == stem and p.suffix.lower() != ".heic"), None)
             cells = [("before: as shot", C.load_rgb8(raw) if raw else None)]
@@ -105,7 +106,7 @@ def main() -> int:
     else:
         raw_dir = INPUTS / args.eval_name / "raw" / "video"
         loops = proj / "out" / "loops"
-        for clip in sorted(raw_dir.glob("*.mov"))[: args.max_rows]:
+        for clip in sorted(raw_dir.glob("*.mov"))[args.offset: args.offset + args.max_rows]:
             lp = loops / f"{clip.stem}.mp4"
             cells = [("before: source clip, first frame", first_frame(clip, 1.0)),
                      ("after: loop, first frame (LUT applied)", first_frame(lp) if lp.is_file() else None),
@@ -116,7 +117,12 @@ def main() -> int:
                 n = int(st["nb_read_frames"]); num, _, den = st["r_frame_rate"].partition("/")
                 cells[2] = ("after: loop, last frame (the seam)", first_frame(lp, (n - 1) / (float(num) / float(den or 1))))
             rows.append((clip.stem, cells))
-    size = sheet(rows, args.title or f"{args.eval_name}: before / after", Path(args.out))
+    # no cutouts anywhere: two bigger columns instead of an empty third one
+    if rows and all(len(r[1]) >= 3 and r[1][2][1] is None for r in rows):
+        rows = [(n, c[:2]) for n, c in rows]
+        size = sheet(rows, args.title or f"{args.eval_name}: before / after", Path(args.out), cols=2)
+    else:
+        size = sheet(rows, args.title or f"{args.eval_name}: before / after", Path(args.out))
     print(f"{args.out} {size[0]}x{size[1]} ({len(rows)} rows)")
     return 0
 

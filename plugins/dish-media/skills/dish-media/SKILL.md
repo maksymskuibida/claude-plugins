@@ -222,7 +222,8 @@ Per file: sRGB → linear, gains, exposure, tone curve on luminance (ratio-prese
 hue and chroma are untouched), saturation as OKLab chroma scaling, back to sRGB,
 straighten, crop, resize, JPEG q90 with the sRGB profile embedded and no EXIF.
 `crop_ratio` is long edge to short edge, so `4:3` gives a landscape photo 4:3 and a
-portrait photo 3:4; a per-file `crop_scale=0.9` takes the largest window and shrinks it,
+portrait photo 3:4; when the brief is "whole plate in frame" and the photographer shot
+3:2 with food to the edges, set the session to `3:2` rather than trimming every plate; a per-file `crop_scale=0.9` takes the largest window and shrinks it,
 which is how a burnt-in phone watermark or a neighbour's plate at the edge is cropped away
 without changing the batch's aspect ratio. `crop_scale` and `crop_center` keep the
 session's ratio, so they cannot isolate a wide subject sitting next to another dish; for
@@ -354,6 +355,13 @@ forward then backward; use it when a revolution was not found or the dish is sym
 yuv420p, CRF 20, bt709 tags, faststart, no audio, no metadata, timestamps exactly on the
 frame grid. The console line per clip shows the period, its score, the turning direction
 and any `period_ambiguous` / `period_weak` warning; the same goes to `qa/flags.json`.
+
+A clip whose turntable does not complete a turn before the clip ends (slow tables,
+stock-style partial spins) has no revolution to cut: `loop_period.py` reports a weak or
+minimum-period match, and the loop must be `pingpong` — a smooth turn-and-return that
+loops without a jump. A hand or a serving spoon in the first seconds is cut away with a
+later `--start`. A continuous pour, steam or a dripping sauce cannot loop either way and
+is a reshoot after the pour, not a cut problem.
 
 `period_ambiguous` means the frame half a turn later matched almost as well as the frame
 a full turn later. A plain round plate or two identical items really are 2-fold
