@@ -80,6 +80,7 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--max-rows", type=int, default=5)
     ap.add_argument("--offset", type=int, default=0, help="skip this many dishes/clips first (for paging)")
+    ap.add_argument("--compare-run", help="another run's outputs dir: its graded photo becomes the middle column (previous version)")
     ap.add_argument("--title", default="")
     args = ap.parse_args()
     out_dir = Path(args.run_outputs)
@@ -96,12 +97,17 @@ def main() -> int:
             raw = work if work.is_file() else next((p for p in raw_dir.iterdir() if p.stem == stem and p.suffix.lower() != ".heic"), None)
             cells = [("before: as shot", C.load_rgb8(raw) if raw else None)]
             g = graded_dir / f"{stem}.jpg"
-            cells.append(("after: graded (session look, crop)", C.load_rgb8(g) if g.is_file() else None))
-            cu = cut_dir / f"{stem}.jpg"
-            if cu.is_file():
-                cells.append(("after: cutout on #F6F4EF", C.load_rgb8(cu)))
+            if args.compare_run:
+                prev = Path(args.compare_run) / "project" / "out" / "photos" / f"{stem}.jpg"
+                cells.append(("previous version", C.load_rgb8(prev) if prev.is_file() else None))
+                cells.append(("this version: graded", C.load_rgb8(g) if g.is_file() else None))
             else:
-                cells.append(("no cutout (delivered as the graded photo)", None))
+                cells.append(("after: graded (session look, crop)", C.load_rgb8(g) if g.is_file() else None))
+                cu = cut_dir / f"{stem}.jpg"
+                if cu.is_file():
+                    cells.append(("after: cutout on #F6F4EF", C.load_rgb8(cu)))
+                else:
+                    cells.append(("no cutout (delivered as the graded photo)", None))
             rows.append((stem, cells))
     else:
         raw_dir = INPUTS / args.eval_name / "raw" / "video"
