@@ -141,14 +141,20 @@ a healthy warm cast reads 5–15.
 
 **No card frame?** Do not fall back to neutral gains (`1,1,1`) and call the batch
 consistent: nothing was corrected. Measure the best neutral thing under that light, the
-rim of a plain white plate, with `--card X,Y,W,H` on the reference dish, and tell
-`calibrate.py` that the patch is white, not 18% grey: `--target-luminance 0.85`. Say in
+rim of a plain white plate: `measure.py photo.jpg --auto --white --preview …` finds the
+flattest bright neutral patch (or give it `--card X,Y,W,H`), and the preview box turns
+red when the patch is not flat, which means it straddles a rim line or a splash. Then
+tell `calibrate.py` the patch is white, not 18% grey: `--target-luminance 0.75`. Not
+0.85: the contrast curve pushes highlights, and a rim measured at 0.85 leaves the
+plate's brighter parts clipping; 0.70–0.78 keeps a white plate white with headroom
+(check `clip` on the sheet, raise `--highlights` to 0.3 if a plate still clips). Say in
 the hand-back that white balance rests on the plate being neutral (bone-white china is
 slightly warm). If the photos come from **different cameras or days**, one card cannot
-serve them all: measure a plate rim in each photo and give each its own gains and
-exposure with `calibrate.py --file-measure NAME measure.json --file-target-luminance 0.85`
-(step 3). That is still one look — the tone curve, saturation and crop stay shared — with
-the light corrected per frame, which is the only honest way to make mixed sources match.
+serve them all: measure a plate rim in each photo (`--auto --white` per file) and give
+each its own gains and exposure with `calibrate.py --file-measure NAME measure.json
+--file-target-luminance 0.75` (step 3). That is still one look — the tone curve,
+saturation and crop stay shared — with the light corrected per frame, which is the only
+honest way to make mixed sources match.
 
 ### 3. Calibrate
 
@@ -218,7 +224,11 @@ straighten, crop, resize, JPEG q90 with the sRGB profile embedded and no EXIF.
 `crop_ratio` is long edge to short edge, so `4:3` gives a landscape photo 4:3 and a
 portrait photo 3:4; a per-file `crop_scale=0.9` takes the largest window and shrinks it,
 which is how a burnt-in phone watermark or a neighbour's plate at the edge is cropped away
-without changing the batch's aspect ratio. Files
+without changing the batch's aspect ratio. `crop_scale` and `crop_center` keep the
+session's ratio, so they cannot isolate a wide subject sitting next to another dish; for
+that one frame use `crop_box=0.05,0.40,0.60,0.35` (x, y, width, height as fractions of
+the frame), which takes exactly that window with its own aspect — one odd ratio in the
+batch is better than a plate that is not the dish. Files
 with more than 1% of pixels at 254+ are flagged `clip_high`; `qa/grade_stats.json`
 holds every file's median luminance and clipping for the sheets and the report.
 
@@ -233,8 +243,9 @@ python3 "$S/cutout.py" --session "$P/work/session.json" --in "$P/out/photos" \
 
 A cutout is for a frame that holds one dish. A table shot with three plates, a glass and
 cutlery has no single subject; the model returns a jumble and the score says so (under
-0.3 means "not one subject", not "a rough edge"). Deliver those as graded photos, or
-`--exclude` them, and ask for a reshoot with one plate filling the frame.
+0.3 means "not one subject", not "a rough edge"). First crop to the dish that is on the
+menu (`crop_box`, or `crop_center` + `crop_scale`), re-grade that file, then cut out;
+only a frame with no usable dish at all goes on the `--exclude` list with a reshoot note.
 
 rembg (`isnet-general-use`, falling back to `u2net`) gives the matte; it is eroded one
 pixel and feathered, composited in linear light, and a contact shadow is made from the
@@ -296,7 +307,9 @@ previous sheet.
 - **Direction**: `video_grade.py` prints which way each clip turns (`turns cw` / `ccw`)
   and `qa_report.py` flags `direction_mismatch` when one clip disagrees with the rest. A
   menu where one dish spins the other way looks wrong; re-export that clip with
-  `--reverse` (a revolution stays seamless backwards) or reshoot.
+  `--reverse` (a revolution stays seamless backwards) or reshoot. `none` means the
+  motion is not a flat spin about the frame centre (a tall glass filmed edge-on, a
+  clip where the dish is off-centre); read the grid instead.
 
 ### 8. Per-file overrides, then re-grade only those files
 
@@ -377,9 +390,12 @@ python3 "$S/qa_report.py" --project "$P"
 ```
 
 Merges every step's flags with the batch-level checks (exposure and cast outliers
-against the batch median, a card that did not come out neutral, missing outputs) into
-`qa/report.md`, grouped by severity, with one line per code saying what to do. Exit code
-1 while any error remains. Fix, re-run the affected step, re-run the report.
+against the batch median, a card that did not come out neutral, missing outputs, a loop
+turning the other way) into `qa/report.md`, grouped by severity, with one line per code
+saying what to do. Exit code 1 while any error remains. Fix, re-run the affected step,
+re-run the report. It cannot see content: a clean report with a hand in frame, an
+out-of-focus dish or a clip of something else is possible, and the report says so in its
+header. The sheets and grids are the sign-off; the report is the checklist under them.
 
 ### 12. Deliver
 

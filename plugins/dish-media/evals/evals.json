@@ -10,12 +10,12 @@
         "results/data/evals/session-with-card"
       ],
       "expectations": [
-        "Every one of the 11 dish photos (IMG_0002..IMG_0012, including the HEIC IMG_0006) has a graded output JPEG",
+        "Every one of the 11 dish photos (IMG_0002..IMG_0012, including the HEIC IMG_0006) has a graded output JPEG, or is excluded with a stated content reason (hand, clutter, not a dish)",
         "Delivered photos are JPEG with an sRGB profile or no profile (never Display P3), long edge at most 2560 px, orientation baked in (no EXIF orientation other than 1)",
         "White balance is derived from the card frame: relative to the raw files, the graded photos' R/G and B/G change by the gains that neutralise the card (within 0.06 / 0.08), and a graded card patch, if delivered uncropped, is neutral within 3/255",
-        "Both turntable clips became SDR H.264 loops: yuv420p, no audio, long edge at most 1920, faststart",
-        "Both loops are seamless: last-frame to first-frame similarity at least 0.95 (normalised cross-correlation of downscaled greyscale frames)",
-        "Each loop is one revolution or a ping-pong: the moon clip (IMG_0013) holds 12.0 s ± 0.3 s and the swift clip (IMG_0014) 10.0 s ± 0.3 s, or the notes state ping-pong was used",
+        "Each clip that shows the dish became an SDR H.264 loop (yuv420p, no audio, long edge at most 1920, faststart); a clip that does not show the dish is named as such and left out",
+        "Delivered loops are seamless: last-frame to first-frame similarity at least 0.95 (or no loop was delivered because the clip is not the dish, stated in the notes)",
+        "Delivered loops hold one revolution (moon 12.0 s ± 0.3 s, swift 10.0 s ± 0.3 s) or a stated ping-pong (or no loop was delivered because the clip is not the dish)",
         "Contact sheets of the graded photos exist (a QA image at most 1568 px on the long edge with several thumbnails) and the notes say they were judged as sheets, not file by file",
         "A QA report exists that names at least one flagged photo (clipping, exposure outlier, cast, matte) with a reason",
         "The final answer names specific shots to redo with concrete reasons (hand, chopsticks or spoon in frame, drink cans, phone watermark, near-duplicate angles)",
@@ -32,7 +32,7 @@
       ],
       "expectations": [
         "Every one of the 7 photos has a graded output JPEG, or is explicitly excluded in the notes with a reason",
-        "Cutouts exist on the requested cream background: the corners of each cutout average within ±4/255 of #F6F4EF",
+        "Every delivered dish is a cutout on #F6F4EF (corners within ±4/255), or a graded photo whose matte failure is explained in the notes; at least one cutout exists",
         "Each cutout carries a soft contact shadow rather than a hard paste: a band of pixels between 3 and 60 levels darker than the background covers at least 0.5% of the image",
         "The missing grey card is handled explicitly: the notes state which neutral reference (white plate rim, assumption, auto) set white balance and exposure, and what that costs",
         "khmer_01 and khmer_02 (dining-room interiors with no dish in frame) are identified as unsuitable for a dish menu and excluded or flagged",

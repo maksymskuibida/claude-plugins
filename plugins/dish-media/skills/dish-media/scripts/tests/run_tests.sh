@@ -58,6 +58,7 @@ run_pipeline() {  # PROJECT SESSION_SOURCE(optional)
   python3 "$S/ingest.py" --in "$D/raw/photos" --out "$D/work/photos" --manifest "$D/work/manifest.csv" --video-in "$D/raw/video" --qa "$D/qa" 2>/dev/null
   python3 "$S/measure.py" "$D/work/photos/dish-001.jpg" --card 180,1380,360,300 --out "$D/work/measure/card.json" 2>/dev/null
   python3 "$S/measure.py" "$D/work/photos/dish-001.jpg" --auto --out "$D/work/measure/card-auto.json" --preview "$D/qa/card-box.jpg" 2>/dev/null
+  python3 "$S/measure.py" "$D/work/photos/dish-001.jpg" --auto --white --out "$D/work/measure/plate-auto.json" --preview "$D/qa/plate-box.jpg" 2>/dev/null
   if [ -n "$src" ]; then
     mkdir -p "$D/work" && cp "$src" "$D/work/session.json"
   else
@@ -74,7 +75,7 @@ run_pipeline() {  # PROJECT SESSION_SOURCE(optional)
   # the same outlier fixed from its own card measurement (--file-measure), and a non-dish excluded
   python3 "$S/measure.py" "$D/work/photos/dish-004.jpg" --card 180,1380,360,300 --out "$D/work/measure/dish-004.json" 2>/dev/null
   python3 "$S/calibrate.py" --from "$D/work/session.json" --out "$D/work/session-filemeasure.json" \
-    --file-measure dish-004 "$D/work/measure/dish-004.json" --exclude dish-002 2>/dev/null
+    --file-measure dish-004 "$D/work/measure/dish-004.json" --exclude dish-002 --override dish-003 crop_box=0.30,0.10,0.45,0.80 2>/dev/null
   python3 "$S/grade.py" --session "$D/work/session-filemeasure.json" --in "$D/work/photos" --out "$D/out/photos-filemeasure" 2>/dev/null
   if [ "$skip_cutout" = 0 ]; then
     python3 "$S/cutout.py" --session "$D/work/session.json" --in "$D/out/photos" --out "$D/out/cutouts" --mattes "$D/work/mattes" --qa "$D/qa" 2>/dev/null

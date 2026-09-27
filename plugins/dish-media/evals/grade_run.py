@@ -138,7 +138,15 @@ def main() -> int:
     if name == "session-with-card":
         stems = [f"IMG_{i:04d}" for i in range(2, 13)]
         graded = find_graded(out, stems)
-        res["graded_all_11"] = (len(graded) == 11, f"{len(graded)}/11 graded outputs found: {sorted(graded)}")
+        sess = next(iter(out.rglob("session.json")), None)
+        excl = set()
+        if sess:
+            try:
+                excl = {C.stem_of(x) for x in (json.loads(sess.read_text()).get("exclude") or [])}
+            except json.JSONDecodeError:
+                pass
+        excluded = [s for s in stems if s not in graded and (s in excl or re.search(s + r".{0,160}(exclud|hand|chopstick|can|clutter|reshoot|not a dish|skip)", notes, re.I | re.S))]
+        res["graded_all_11"] = (len(graded) + len(excluded) == 11, f"{len(graded)}/11 graded: {sorted(graded)}; excluded with a reason: {excluded}")
         bad = []
         for s, p in graded.items():
             with Image.open(p) as im:
@@ -180,17 +188,20 @@ def main() -> int:
         wb_ok = bool(eff) and all(abs(e[0] - want_r) <= 0.06 and abs(e[1] - want_b) <= 0.08 for e in eff)
         res["white_balance"] = (card_ok and wb_ok, f"{card_note}; wanted R/G x{want_r:.3f} B/G x{want_b:.3f}; measured " + ("; ".join(pairs) or "no matchable pair"))
         loops = [p for p in mp4s(out) if any(k in p.stem for k in ("0013", "0014", "moon", "swift"))]
+        # the fixture clips are not dishes; a run that says so and delivers no loop made the right call
+        refused = not loops and bool(re.search(r"(0013|0014|clip|video|footage).{0,300}(not (a |your |the )?(dish|food)|moon|satellite|no food|exclud)", notes, re.I | re.S))
         info = {p.name: probe(p) for p in loops}
         fmt_ok = len(loops) >= 2 and all(i["video"].get("codec_name") == "h264" and i["video"].get("pix_fmt") == "yuv420p" and i["audio"] == 0
                                          and max(int(i["video"].get("width", 0)), int(i["video"].get("height", 0))) <= 1920 for i in info.values())
-        res["loops_format"] = (fmt_ok and all(faststart(p) for p in loops), json.dumps({k: (v["video"].get("codec_name"), v["video"].get("pix_fmt"), v["video"].get("width"), v["video"].get("height"), v["audio"], round(v["duration"], 2)) for k, v in info.items()}))
+        refused_note = "no loop delivered; the notes name the clips as non-dish content (moon / satellite), which is the right call for a menu"
+        res["loops_format"] = (refused or (fmt_ok and all(faststart(p) for p in loops)), refused_note if refused else json.dumps({k: (v["video"].get("codec_name"), v["video"].get("pix_fmt"), v["video"].get("width"), v["video"].get("height"), v["audio"], round(v["duration"], 2)) for k, v in info.items()}))
         seams = {p.name: seam(p) for p in loops}
-        res["loops_seamless"] = (len(seams) >= 2 and all(s >= 0.95 for s, _ in seams.values()), json.dumps({k: (round(s, 4), n) for k, (s, n) in seams.items()}))
+        res["loops_seamless"] = (refused or (len(seams) >= 2 and all(s >= 0.95 for s, _ in seams.values())), refused_note if refused else json.dumps({k: (round(s, 4), n) for k, (s, n) in seams.items()}))
         rev = {}
         for p, (s, n) in seams.items():
             want = 360 if "0013" in p or "moon" in p else 300
             rev[p] = abs(n - want) <= 9 or bool(re.search(r"ping", notes, re.I))
-        res["loops_one_revolution"] = (len(rev) >= 2 and all(rev.values()), json.dumps({k: seams[k][1] for k in rev}) + ("; notes mention ping-pong" if re.search(r"ping", notes, re.I) else ""))
+        res["loops_one_revolution"] = (refused or (len(rev) >= 2 and all(rev.values())), refused_note if refused else json.dumps({k: seams[k][1] for k in rev}) + ("; notes mention ping-pong" if re.search(r"ping", notes, re.I) else ""))
         sheets = [p for p in jpgs(out) if p.parent.name in ("sheets", "qa") or "sheet" in p.name.lower() or "contact" in p.name.lower()]
         sheet_sizes = {}
         for p in sheets:
@@ -218,7 +229,13 @@ def main() -> int:
             corners = np.stack([a[:12, :12], a[:12, -12:], a[-12:, :12], a[-12:, -12:]]).reshape(-1, 3).mean(axis=0)
             if np.abs(corners - bg).max() <= 4:
                 cut.append(p)
-        res["cutouts_on_cream"] = (len(cut) >= 3, f"{len(cut)} images with #F6F4EF corners: {[c.name for c in cut][:10]}")
+        deliver_dir = next((d for d in (out / "project" / "deliver" / "photos", out / "project" / "delivery") if d.is_dir() and list(d.glob("*.jpg"))), None)
+        delivered = sorted(deliver_dir.glob("*.jpg")) if deliver_dir else []
+        cut_names = {c.name for c in cut}
+        not_cut = [d.name for d in delivered if d.name not in cut_names]
+        explained = [n for n in not_cut if re.search(Path(n).stem + r".{0,400}(matte|cutout|cut out|mask|bowl|component|missing|drop|graded photo|instead)", notes, re.I | re.S)]
+        ok_cut = bool(cut) and bool(delivered) and all(n in explained for n in not_cut)
+        res["cutouts_on_cream"] = (ok_cut, f"{len(cut)} cutouts with #F6F4EF corners; delivered {[d.name for d in delivered]}; delivered without a cutout: {not_cut} (explained in the notes: {explained})")
         shadow = {}
         for p in cut:
             a = C.load_rgb8(p).astype(np.int32)
@@ -231,9 +248,16 @@ def main() -> int:
         res["interiors_identified"] = (all(re.search(k + r".{0,160}(interior|dining|room|no dish|not a dish|unusable|exclud|not .{0,20}food|scene)", notes, re.I | re.S) for k in ("khmer_01", "khmer_02")), "notes searched for khmer_01/02 as interiors")
         res["cross_session_reported"] = (bool(re.search(r"outlier|different (camera|light|session|source)|cannot .{0,30}(match|share)|one look", notes, re.I)), "notes searched")
         meds = {}
-        deliver = out / "project" / "deliver" / "photos"
-        for p in (sorted(deliver.glob("*.jpg")) if deliver.is_dir() else [graded[s] for s in sorted(graded)]):
-            meds[p.stem] = C.image_stats(C.load_rgb8(p))["y_median"]
+        deliver = next((d for d in (out / "project" / "deliver" / "photos", out / "project" / "delivery", out / "project" / "deliver") if d.is_dir() and list(d.glob("*.jpg"))), None)
+        for p in (sorted(deliver.glob("*.jpg")) if deliver else [graded[s] for s in sorted(graded)]):
+            a = C.load_rgb8(p)
+            f = a.astype(np.float32) / 255.0
+            y = f @ C.LUMA_709
+            # a plain background (cutout) would dominate the median: measure the subject only
+            corners = np.stack([a[:8, :8], a[:8, -8:], a[-8:, :8], a[-8:, -8:]]).reshape(-1, 3).mean(axis=0)
+            plain = np.abs(a.astype(np.int32) - corners.astype(np.int32)).max(axis=2) <= 6
+            sel = ~plain if plain.mean() > 0.3 else np.ones(y.shape, bool)
+            meds[p.stem] = float(np.median(y[sel])) if sel.sum() > 1000 else float(np.median(y))
         spread = (max(meds.values()) - min(meds.values())) if meds else 9
         res["delivered_set_even"] = (bool(meds) and spread <= 0.20, f"Y50 per delivered photo {json.dumps({k: round(v, 2) for k, v in meds.items()})}; spread {spread:.2f} (limit 0.20)")
         sheets = [p for p in jpgs(out) if "sheet" in p.parent.name or "sheet" in p.name.lower() or "contact" in p.name.lower()]

@@ -83,6 +83,10 @@ def main() -> int:
     tx, ty, tw, th = [v * scale for v in truth["card_box"]]
     inside = ab["x"] >= tx and ab["y"] >= ty and ab["x"] + ab["w"] <= tx + tw and ab["y"] + ab["h"] <= ty + th
     check(inside, f"measure.py --auto put its box inside the card ({ab})")
+    plate = json.loads((P / "work" / "measure" / "plate-auto.json").read_text())
+    pl = plate["card_mean_srgb255"]
+    check(0.55 * 255 <= sum(pl) / 3 <= 0.93 * 255 and plate["flatness_cv"] <= 0.08 and plate["ratios"]["r_over_g"] > 1.1,
+          f"measure.py --auto --white lands on a flat bright patch that still carries the cast (mean {pl}, cv {plate['flatness_cv']})")
     pred = session["provenance"]["predicted_card_srgb255"]
     check(max(abs(pred[0] - pred[1]), abs(pred[2] - pred[1])) <= 1.0 and abs(pred[1] - target) <= 0.5,
           f"calibrate predicts a neutral card on target ({pred} vs {target:.1f})")
@@ -120,6 +124,10 @@ def main() -> int:
         check(abs(mean.mean() - target) / target <= 0.03 and max(abs(mean[0] - mean[1]), abs(mean[2] - mean[1])) <= 2.0,
               f"--file-measure brings the outlier's card to target and neutral ({mean.round(1)})")
     check(not (fm / "dish-002.jpg").is_file() and (fm / "dish-001.jpg").is_file(), "an excluded file is skipped by grade.py, the others are not")
+    if (fm / "dish-003.jpg").is_file():
+        with Image.open(fm / "dish-003.jpg") as im:
+            check(abs(im.size[0] / im.size[1] - (0.45 * 4000) / (0.80 * 3000)) < 0.02 and max(im.size) == session["output_long_edge"],
+                  f"crop_box takes exactly its window with its own aspect ({im.size})")
     check(sess_fm["provenance"].get("predicted_card_srgb255") is not None, "--from keeps the predicted card in provenance")
 
     print("contact sheets")
@@ -179,6 +187,8 @@ def main() -> int:
     check(any(f["code"] == "video_failed" and f["file"] == "hdr-001.mov" for f in batch_flags), "grading the raw HLG clip fails per clip and is flagged, not fatal")
     check(not any(f["code"] == "video_failed" for f in flags), "the failure flag is cleared once the tone-mapped clip goes through")
     check((P / "out" / "loops" / "hdr-001.mp4").is_file(), "the tone-mapped HLG clip went through video_grade.py")
+    check((P / "work" / "session.cube").is_file() and not (P / "out" / "loops" / "session.cube").is_file(), "the LUT is written into work/, beside the session, not among the loops")
+    check("not checked here" in report if (report := (P / "qa" / "report.md").read_text()) else False, "the report states what it cannot check (content)")
     pr = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=color_transfer", "-of",
                          "default=nw=1:nk=1", str(P / "work" / "sdr" / "hdr-001.mov")], capture_output=True, text=True)
     check(pr.stdout.strip() == "bt709", f"tonemap_hdr.sh output is tagged bt709 ({pr.stdout.strip()})")

@@ -54,7 +54,7 @@ def main() -> int:
         "summary": {"passed": passed, "failed": len(exps) - passed, "total": len(exps), "pass_rate": round(passed / len(exps), 3)},
         "execution_metrics": {"tool_calls": {}, "total_tool_calls": timing.get("tool_uses", 0), "total_steps": 0, "errors_encountered": 0,
                               "output_chars": sum(p.stat().st_size for p in (run / "outputs").rglob("*.md")), "transcript_chars": 0},
-        "timing": {"executor_duration_seconds": timing.get("total_duration_seconds", 0), "total_duration_seconds": timing.get("total_duration_seconds", 0)},
+        # no "timing" here on purpose: the aggregator then reads timing.json, which also carries the tokens
         "claims": [],
         "user_notes_summary": {"uncertainties": [], "needs_review": [], "workarounds": []},
     }

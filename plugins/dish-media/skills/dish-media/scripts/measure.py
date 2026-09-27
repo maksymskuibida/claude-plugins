@@ -3,11 +3,14 @@
 
     measure.py work/photos/card.jpg --card X,Y,W,H --out work/measure/card.json
     measure.py work/photos/card.jpg --auto --out ... --preview qa/card-box.jpg
+    measure.py work/photos/dish.jpg --auto --white --out ... --preview ...   # no card: a white plate rim
 
 Region is in pixels of the given (working, sRGB) image. --auto looks for the
 flattest, least colourful mid-grey patch, which is usually the card and
-sometimes a shadowed part of a white plate: check the --preview before
-trusting it. White balance ratios are computed in linear light.
+sometimes a shadowed part of a white plate; with --white it looks for the
+flattest bright neutral patch instead (a plate rim, a napkin) for shoots
+without a card. Check the --preview before trusting either: the box turns
+red when the patch is not flat. White balance ratios are in linear light.
 """
 from __future__ import annotations
 
@@ -23,8 +26,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
 
 
-def auto_card(rgb8: np.ndarray) -> tuple[int, int, int, int]:
-    """Best-scoring window: flattest first, then closest to an 18% grey.
+def auto_card(rgb8: np.ndarray, white: bool = False) -> tuple[int, int, int, int]:
+    """Best-scoring window: flattest first, then closest to an 18% grey
+    (or, with `white`, to a bright plate white around 0.80 encoded).
 
     Under a colour cast every neutral surface shares the same R/G and B/G,
     so chroma cannot single out the card; it only breaks ties. A matte
@@ -39,18 +43,19 @@ def auto_card(rgb8: np.ndarray) -> tuple[int, int, int, int]:
     step = max(2, win // 3)
     lin = C.srgb_to_linear(small.astype(np.float32) / 255.0)
     yenc = small.astype(np.float32) @ C.LUMA_709 / 255.0
+    lo, hi, ideal = (0.55, 0.93, 0.80) if white else (0.2, 0.7, 0.42)
     cands = []
     for y0 in range(0, sh - win + 1, step):
         for x0 in range(0, sw - win + 1, step):
             patch_y = yenc[y0:y0 + win, x0:x0 + win]
             m = float(patch_y.mean())
-            if m < 0.2 or m > 0.7:
+            if m < lo or m > hi:
                 continue
             pl = lin[y0:y0 + win, x0:x0 + win].reshape(-1, 3).mean(axis=0)
             chroma = abs(pl[0] / max(pl[1], 1e-6) - 1.0) + abs(pl[2] / max(pl[1], 1e-6) - 1.0)
-            cands.append((float(patch_y.std()), abs(m - 0.42), float(chroma), x0, y0))
+            cands.append((float(patch_y.std()), abs(m - ideal), float(chroma), x0, y0))
     if not cands:
-        C.die("--auto found no mid-grey flat patch; pass --card X,Y,W,H")
+        C.die("--auto found no flat patch in range; pass --card X,Y,W,H" + ("" if white else " (or try --white for a plate rim)"))
 
     # log-flatness so a flat card beats textured table by a wide margin;
     # luminance distance from 18% grey in tenths; chroma to reject solid food
@@ -95,7 +100,7 @@ def measure(rgb8: np.ndarray, box: tuple[int, int, int, int]) -> dict:
     }
 
 
-def write_preview(rgb8: np.ndarray, box, path: Path, max_edge: int = 1568) -> None:
+def write_preview(rgb8: np.ndarray, box, path: Path, max_edge: int = 1568, flat: bool = True, label: str = "card") -> None:
     from PIL import Image, ImageDraw
     im = Image.fromarray(rgb8)
     scale = min(1.0, max_edge / max(im.size))
@@ -103,8 +108,9 @@ def write_preview(rgb8: np.ndarray, box, path: Path, max_edge: int = 1568) -> No
         im = im.resize((round(im.size[0] * scale), round(im.size[1] * scale)), Image.Resampling.LANCZOS)
     d = ImageDraw.Draw(im)
     x, y, w, h = [v * scale for v in box]
-    d.rectangle([x, y, x + w, y + h], outline=(255, 0, 255), width=4)
-    d.text((x, max(0, y - 16)), "card", fill=(255, 0, 255))
+    colour = (255, 0, 255) if flat else (255, 40, 40)
+    d.rectangle([x, y, x + w, y + h], outline=colour, width=4)
+    d.text((x, max(0, y - 16)), label if flat else f"{label}: NOT FLAT", fill=colour)
     C.save_jpeg(path, np.asarray(im), quality=85)
 
 
@@ -114,6 +120,7 @@ def main() -> int:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--card", help="X,Y,W,H in pixels")
     g.add_argument("--auto", action="store_true")
+    ap.add_argument("--white", action="store_true", help="with --auto: look for a bright neutral patch (plate rim) instead of 18%% grey")
     ap.add_argument("--out", help="JSON to write (default: stdout)")
     ap.add_argument("--preview", help="JPEG showing the measured box")
     args = ap.parse_args()
@@ -126,8 +133,8 @@ def main() -> int:
         except (ValueError, AssertionError):
             C.die("--card wants four integers: X,Y,W,H")
     else:
-        box = auto_card(rgb8)
-        C.log(f"auto card box: {box[0]},{box[1]},{box[2]},{box[3]}")
+        box = auto_card(rgb8, white=args.white)
+        C.log(f"auto {'white' if args.white else 'card'} box: {box[0]},{box[1]},{box[2]},{box[3]}")
     m = measure(rgb8, box)
     m["source"] = Path(args.image).name
     if m["flatness_cv"] > 0.08:
@@ -140,7 +147,7 @@ def main() -> int:
     else:
         sys.stdout.write(text)
     if args.preview:
-        write_preview(rgb8, box, Path(args.preview))
+        write_preview(rgb8, box, Path(args.preview), flat=m["flatness_cv"] <= 0.08, label="white" if args.white else "card")
     return 0
 
 

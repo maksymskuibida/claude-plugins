@@ -97,8 +97,8 @@ A session, as Claude drives it through the skill (`S` is the skill's `scripts/` 
 - **Never generative.** Colour and light are arithmetic on the real pixels; the cutout is a
   segmentation mask; the loop is a cut of the real rotation.
 - **Grey card first**; white balance and exposure are derived, not eyeballed. No card:
-  measure a white plate rim instead (`--target-luminance 0.85`), per photo when the
-  sources differ (`--file-measure`).
+  measure a white plate rim instead (`--auto --white`, `--target-luminance 0.75`), per
+  photo when the sources differ (`--file-measure`).
 - **One parameter set per session** in `work/session.json`; differences between dishes are
   per-file overrides in that file.
 - **Claude judges contact sheets and frame grids only**, never single files, and only the
@@ -113,7 +113,7 @@ A session, as Claude drives it through the skill (`S` is the skill's `scripts/` 
 |---|---|
 | `setup.sh` | toolchain check; installs only after printing the plan and asking |
 | `ingest.py` | HEIC/JPEG/PNG → 2400 px sRGB JPEG, orientation normalised, manifest CSV; lists clips and flags HDR ones |
-| `measure.py` | grey-card region (explicit or `--auto`) → mean RGB, R/G, B/G, luminance percentiles, clipping; preview JPEG |
+| `measure.py` | grey-card region (explicit, `--auto`, or `--auto --white` for a plate rim when there is no card) → mean RGB, R/G, B/G, luminance percentiles, clipping; preview JPEG that turns red when the patch is not flat |
 | `calibrate.py` | measurement + targets → `session.json` (gains, exposure solved through the tone curve, look, per-file overrides and measurements, exclude list) |
 | `grade.py` | applies the session: linear light, gains, exposure, tone curve, OKLab saturation, straighten, crop, resize, JPEG q90 + sRGB profile; `--variants` |
 | `cutout.py` | rembg matte → erode/feather → composite on the background with a contact shadow; confidence score and flags |

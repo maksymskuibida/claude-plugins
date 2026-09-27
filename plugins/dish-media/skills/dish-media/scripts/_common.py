@@ -42,7 +42,7 @@ DEFAULT_LOOK = {
 OVERRIDE_KEYS = {
     "exposure", "exposure_ev", "wb_gains", "contrast_strength", "contrast_midpoint",
     "shadows", "highlights", "saturation", "crop_ratio", "straighten_deg",
-    "crop_center", "crop_scale", "output_long_edge", "background", "shadow",
+    "crop_center", "crop_scale", "crop_box", "output_long_edge", "background", "shadow",
     # video-only
     "start", "duration", "loop", "reverse",
 }

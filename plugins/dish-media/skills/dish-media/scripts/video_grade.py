@@ -160,14 +160,18 @@ def main() -> int:
     ap.add_argument("--crf", type=int, default=20)
     ap.add_argument("--preset", default="medium")
     ap.add_argument("--lut-size", type=int, default=33)
-    ap.add_argument("--lut-dir", help="where .cube files go (default: next to the session file)")
+    ap.add_argument("--lut-dir", help="where .cube files go (default: the project's work/ folder, else next to the output)")
     ap.add_argument("--dry-run", action="store_true", help="print the ffmpeg command, encode nothing")
     args = ap.parse_args()
     if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
         C.die("ffmpeg and ffprobe are required (brew install ffmpeg)")
 
     session = C.load_session(args.session)
-    lut_dir = Path(args.lut_dir) if args.lut_dir else Path(args.session).resolve().parent
+    out_folder = Path(args.out) if Path(args.out).suffix.lower() != ".mp4" else Path(args.out).parent
+    if args.lut_dir:
+        lut_dir = Path(args.lut_dir)
+    else:  # P/out/loops -> P/work when it exists (the session may live somewhere read-only)
+        lut_dir = next((c for c in (out_folder.parent.parent / "work", out_folder.parent / "work") if c.is_dir()), out_folder)
     src = Path(args.inp)
     clips = C.list_videos(src)
     if not clips:

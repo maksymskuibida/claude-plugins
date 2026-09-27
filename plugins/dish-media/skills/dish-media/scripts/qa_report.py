@@ -122,13 +122,15 @@ def main() -> int:
             computed.append({"file": "session.json", "code": "card_not_neutral", "severity": "error",
                              "detail": f"predicted card {pred}, tolerance {tol}/255"})
     # rotation direction: every loop on one menu should turn the same way
-    dirs = {k: v.get("direction") for k, v in vstats.items() if isinstance(v, dict) and v.get("direction") in ("cw", "ccw")}
+    dirs = {k: v.get("direction") for k, v in sorted(vstats.items()) if isinstance(v, dict) and v.get("direction") in ("cw", "ccw")}
     if len(set(dirs.values())) > 1:
-        minority = min(set(dirs.values()), key=lambda d: sum(1 for v in dirs.values() if v == d))
-        for k, d in sorted(dirs.items()):
-            if d == minority:
+        counts = {d: sum(1 for v in dirs.values() if v == d) for d in ("cw", "ccw")}
+        # the convention is the majority; on a tie the first clip (by name) sets it
+        majority = max(("cw", "ccw"), key=lambda d: (counts[d], d == next(iter(dirs.values()))))
+        for k, d in dirs.items():
+            if d != majority:
                 computed.append({"file": f"{k}.mp4", "code": "direction_mismatch", "value": d,
-                                 "detail": f"turns {d} while most clips turn {'cw' if d == 'ccw' else 'ccw'}"})
+                                 "detail": f"turns {d} while the batch turns {majority}"})
     # missing outputs
     want_cutouts = bool(session and session.get("background"))
     excluded = {C.stem_of(x) for x in ((session or {}).get("exclude") or [])}
@@ -173,6 +175,8 @@ def main() -> int:
         turn = ", ".join(f"{k} {v}" for k, v in sorted(dirs.items()))
         lines.append(f"- loops: {len(vstats)} clips" + (f", seam similarity min {min(seams):.3f}" if seams else "") + (f"; direction: {turn}" if turn else ""))
     lines.append(f"- flags: {len(by_sev['error'])} error, {len(by_sev['warn'])} warn, {len(by_sev['info'])} info")
+    lines.append("- not checked here: whether a frame or clip shows the dish at all, a hand or clutter in frame, focus. "
+                 "Those come from the contact sheets and frame grids; a clean report is not a sign-off.")
     lines.append("")
     for sev, title in (("error", "Errors (fix before delivery)"), ("warn", "Warnings (look at the sheet)"), ("info", "Info")):
         items = by_sev.get(sev) or []

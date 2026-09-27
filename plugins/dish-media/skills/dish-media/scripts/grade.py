@@ -47,6 +47,15 @@ def apply_geometry(img: np.ndarray, p: dict) -> np.ndarray:
     if angle:
         m = cv2.getRotationMatrix2D((w / 2.0, h / 2.0), angle, 1.0)
         img = cv2.warpAffine(img, m, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
+    box = p.get("crop_box")
+    if box:                              # [x, y, w, h] as fractions of the frame: exactly this window, its own aspect
+        bx, by, bw, bh = [float(v) for v in box]
+        x0, y0 = int(round(max(0.0, bx) * w)), int(round(max(0.0, by) * h))
+        x1, y1 = int(round(min(1.0, bx + bw) * w)), int(round(min(1.0, by + bh) * h))
+        if x1 - x0 < 16 or y1 - y0 < 16:
+            C.die(f"crop_box {box} is empty or outside the frame")
+        img = img[y0:y1, x0:x1]
+        return resize_long_edge(img, int(p.get("output_long_edge") or 1600))
     if aspect is not None and (h > w) != (aspect < 1):
         aspect = 1.0 / aspect          # "4:3" means long:short, whichever way the photo stands
     hw, hh = inscribed_rect(w, h, angle, aspect)
@@ -60,8 +69,12 @@ def apply_geometry(img: np.ndarray, p: dict) -> np.ndarray:
     x0, y0 = int(round(cx - hw)), int(round(cy - hh))
     x1, y1 = int(round(cx + hw)), int(round(cy + hh))
     img = img[max(0, y0):y1, max(0, x0):x1]
+    return resize_long_edge(img, int(p.get("output_long_edge") or 1600))
+
+
+def resize_long_edge(img: np.ndarray, long_edge: int) -> np.ndarray:
+    import cv2
     ch, cw = img.shape[:2]
-    long_edge = int(p.get("output_long_edge") or 1600)
     scale = long_edge / max(cw, ch)
     if abs(scale - 1.0) > 1e-9:
         new = (max(1, round(cw * scale)), max(1, round(ch * scale)))
