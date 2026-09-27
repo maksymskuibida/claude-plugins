@@ -107,6 +107,67 @@ def _worker(job):
     return src.name, grade_one(src, dst, p)
 
 
+def vessel_check(files, out_dir: Path) -> list[dict]:
+    """subject_cut flags: the plate touches the crop edge where it did not in the source.
+
+    Uses rembg on 800 px copies of the graded output and the working file; a
+    frame whose source already cut the vessel is not blamed for the crop."""
+    try:
+        import cutout as CO
+    except ImportError:
+        return []
+    try:
+        model, _ = CO.load_model(CO.DEFAULT_MODEL)
+    except SystemExit:
+        C.log("  vessel check skipped: rembg not available")
+        return []
+    import cv2
+    flags = []
+
+    def small(path: Path):
+        a = C.load_rgb8(path)
+        s = 800.0 / max(a.shape[:2])
+        if s < 1:
+            a = cv2.resize(a, (max(8, round(a.shape[1] * s)), max(8, round(a.shape[0] * s))), interpolation=cv2.INTER_AREA)
+        return a
+
+    def matte_touch(a) -> float:
+        return CO.confidence(CO.matte_for(a, model))[1]["border_touch"]
+
+    def plate_touch(a) -> float:
+        """Border contact of the largest bright, low-chroma blob: a white plate the
+        segmentation model may leave out (it sees food, not china)."""
+        lin = C.srgb_to_linear(a.astype(np.float32) / 255.0)
+        y = lin @ C.LUMA_709
+        chroma = np.abs(lin[..., 0] / np.maximum(lin[..., 1], 1e-4) - 1) + np.abs(lin[..., 2] / np.maximum(lin[..., 1], 1e-4) - 1)
+        mask = ((y > 0.40) & (chroma < 0.35)).astype(np.uint8)
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=4)
+        if n < 2:
+            return 0.0
+        big = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+        if stats[big, cv2.CC_STAT_AREA] < 0.03 * mask.size:
+            return 0.0
+        comp = labels == big
+        border = np.concatenate([comp[0, :], comp[-1, :], comp[:, 0], comp[:, -1]])
+        return float(border.mean())
+    for src in files:
+        dst = out_dir / f"{src.stem}.jpg"
+        if not dst.is_file():
+            continue
+        a_out, a_src = small(dst), small(src)
+        m_out, m_src = matte_touch(a_out), matte_touch(a_src)
+        p_out, p_src = plate_touch(a_out), plate_touch(a_src)
+        by_matte = m_out > 0.01 and m_out > m_src + 0.005
+        by_plate = p_out > 0.05 and p_out > p_src + 0.03
+        if by_matte or by_plate:
+            t_out, t_src = (m_out, m_src) if by_matte else (p_out, p_src)
+            flags.append({"file": dst.name, "code": "subject_cut", "value": round(t_out, 3),
+                          "detail": f"the {'dish' if by_matte else 'plate'} touches the crop edge on {t_out:.0%} of the border (source: {t_src:.0%}): the crop cuts the vessel",
+                          "hint": "widen the crop for this file (crop_scale up, crop_ratio none, or a larger crop_box) and re-grade"})
+            C.log(f"  {dst.name}: subject_cut ({t_out:.0%} of the border, source {t_src:.0%})")
+    return flags
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--session", required=True)
@@ -118,6 +179,7 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=1, help="parallel processes (output is identical either way)")
     ap.add_argument("--clip-high-warn", type=float, default=1.0, help="flag files with more than this %% of pixels at 254+")
     ap.add_argument("--clip-low-warn", type=float, default=2.0, help="flag files with more than this %% of pixels at 1-")
+    ap.add_argument("--no-vessel-check", action="store_true", help="skip the rembg check that a crop does not cut the plate (on by default when rembg is installed)")
     args = ap.parse_args()
 
     session = C.load_session(args.session)
@@ -174,6 +236,8 @@ def main() -> int:
 
     if args.qa:
         flags = []
+        if not args.no_vessel_check:
+            flags += vessel_check(files, out_dir)
         for name in sorted(results):
             st = results[name]
             if st["clip_high_pct"] > args.clip_high_warn:

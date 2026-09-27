@@ -131,6 +131,19 @@ def main() -> int:
         check(abs(mean.mean() - target) / target <= 0.03 and max(abs(mean[0] - mean[1]), abs(mean[2] - mean[1])) <= 2.0,
               f"--file-measure brings the outlier's card to target and neutral ({mean.round(1)})")
     check(not (fm / "dish-002.jpg").is_file() and (fm / "dish-001.jpg").is_file(), "an excluded file is skipped by grade.py, the others are not")
+    snap = C.load_session(P / "work" / "session-snapshot.json")
+    ovs = snap["overrides"].get("dish-004") or {}
+    full = (sess_fm["overrides"].get("dish-004") or {}).get("wb_gains", [1, 1, 1])
+    damp = ovs.get("wb_gains", [1, 1, 1])
+    check(abs(damp[0] - full[0] ** 0.8) < 1e-3 and abs(damp[2] - full[2] ** 0.8) < 1e-3, f"--wb-strength 0.8 applies 80% of the measured correction ({damp} vs full {full})")
+    snap_out = P / "out" / "photos-snapshot" / "dish-004.jpg"
+    if snap_out.is_file():
+        st = C.image_stats(C.load_rgb8(snap_out))
+        check(0.86 <= st["y_p95"] <= 0.94, f"--anchor highlights lands the frame's p95 near 0.90 ({st['y_p95']})")
+    # the crop_box on dish-003 cuts the plate on both sides: grade.py's vessel check must say so
+    flags_fm = C.load_flags(P / "qa-filemeasure")
+    sub = [f["file"] for f in flags_fm if f.get("code") == "subject_cut"]
+    check("dish-003.jpg" in sub and "dish-001.jpg" not in sub, f"the vessel check flags the crop_box that cuts dish-003's plate and nothing else ({sub})")
     if (fm / "dish-003.jpg").is_file():
         with Image.open(fm / "dish-003.jpg") as im:
             check(abs(im.size[0] / im.size[1] - (0.45 * 4000) / (0.80 * 3000)) < 0.02 and max(im.size) == session["output_long_edge"],

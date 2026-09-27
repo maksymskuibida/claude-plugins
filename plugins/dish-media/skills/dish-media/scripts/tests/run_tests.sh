@@ -77,8 +77,13 @@ run_pipeline() {  # PROJECT SESSION_SOURCE(optional)
   # the same outlier fixed from its own card measurement (--file-measure), and a non-dish excluded
   python3 "$S/measure.py" "$D/work/photos/dish-004.jpg" --card 180,1380,360,300 --out "$D/work/measure/dish-004.json" 2>/dev/null
   python3 "$S/calibrate.py" --from "$D/work/session.json" --out "$D/work/session-filemeasure.json" \
-    --file-measure dish-004 "$D/work/measure/dish-004.json" --exclude dish-002 --override dish-003 crop_box=0.30,0.10,0.45,0.80 2>/dev/null
-  python3 "$S/grade.py" --session "$D/work/session-filemeasure.json" --in "$D/work/photos" --out "$D/out/photos-filemeasure" 2>/dev/null
+    --file-measure dish-004 "$D/work/measure/dish-004.json" --wb-strength 1 --anchor patch \
+    --exclude dish-002 --override dish-003 crop_box=0.30,0.10,0.45,0.80 2>/dev/null
+  # the snapshot defaults: damped gains, exposure from the frame's highlights
+  python3 "$S/calibrate.py" --from "$D/work/session.json" --out "$D/work/session-snapshot.json" \
+    --file-measure dish-004 "$D/work/measure/dish-004.json" 2>/dev/null
+  python3 "$S/grade.py" --session "$D/work/session-snapshot.json" --in "$D/work/photos/dish-004.jpg" --out "$D/out/photos-snapshot" --no-vessel-check 2>/dev/null
+  python3 "$S/grade.py" --session "$D/work/session-filemeasure.json" --in "$D/work/photos" --out "$D/out/photos-filemeasure" --qa "$D/qa-filemeasure" 2>/dev/null
   if [ "$skip_cutout" = 0 ]; then
     python3 "$S/cutout.py" --session "$D/work/session.json" --in "$D/out/photos" --out "$D/out/cutouts" --mattes "$D/work/mattes" --qa "$D/qa" 2>/dev/null
     python3 "$S/contact_sheet.py" --in "$D/out/cutouts" --out "$D/qa/sheets-cutouts" --stats "$D/qa/cutout_stats.json" 2>/dev/null

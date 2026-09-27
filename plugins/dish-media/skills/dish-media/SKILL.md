@@ -179,6 +179,29 @@ provenance), not the warmth you chose. Any value can be set with a flag (`--cont
 re-specified, including overrides. Because exposure is solved through the curve, changing
 contrast or shadows here keeps the card on target; hand-editing the JSON does not.
 
+**Snapshots from many phones and days** (staff and customer photos, no card, no shared
+light) are a different job from a shoot, and the defaults change with them:
+
+- Each file gets its own measurement (`measure.py --auto --white`, checked on the
+  preview; a wooden table, printed text or a coloured plate is not a neutral) and
+  `calibrate.py --file-measure`. That correction is applied at 80% by default
+  (`--wb-strength 0.8`) and clamped, because a napkin, a wall or rice is not a card: a
+  full correction from a wrong patch swings a frame blue or orange, a damped one leaves a
+  fifth of the cast and never ruins a file. Exposure comes from the frame's own
+  highlights (`--anchor highlights`: the 95th percentile lands at 0.90), so a dark frame
+  is lifted and a bright one is not clipped, whatever the patch's reflectance was.
+- Phone JPEGs are already contrasty and saturated: keep contrast at the default 2.5 and
+  set `--saturation 1.0`; the variants sheet decides, but it rarely asks for more.
+- `--crop-ratio none` unless the batch really shares an orientation: forcing 4:3 onto
+  square and portrait snapshots cuts plates. Crop only to remove clutter, with
+  `crop_box`, and keep the vessel whole.
+- `grade.py` runs a vessel check when rembg is installed and flags `subject_cut` for a
+  crop that touches the plate where the source did not. A flagged file is not delivered
+  until its crop is widened.
+- Before delivering, make one before/after pair sheet of the three most-corrected files
+  (largest gains or exposure) and look at it: the damped correction should read as
+  "cleaner", never as a colour shift you can name.
+
 Two more things live in the session file. `--exclude IMG_0008 IMG_0009` lists files that
 are not dishes (an interior, a table shot with four plates, the card frame if it was
 ingested with the rest): `grade.py`, `qa_report.py` and `deliver.py` skip them, so
@@ -487,6 +510,9 @@ Blur and offset of the shadow are in pixels at 1600 px and scale with the output
   and in `qa/grade_stats.json` should sit within about 0.1 of the reference for every
   dish that was lit the same way. A spread of 0.4 means the light differed and the files
   need their own measurements (`--file-measure`), not a shared exposure nudge.
+- **A dark snapshot is not "moody", it is dark.** Guests compare dishes side by side on
+  one screen; the dark one loses. Highlight-anchored exposure lifts it; do not keep a
+  frame dark because the bar was dark.
 
 ## Model note
 

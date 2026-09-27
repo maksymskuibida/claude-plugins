@@ -23,6 +23,8 @@ import math
 import sys
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
 
@@ -72,7 +74,12 @@ def main() -> int:
     ap.add_argument("--file-measure", nargs=2, action="append", metavar=("FILE", "MEASURE_JSON"),
                     help="per-file white balance and exposure from that file's own measurement (a plate rim, a card in "
                          "that frame); stored as an override; repeatable")
-    ap.add_argument("--file-target-luminance", type=float, help="target for --file-measure patches (default: --target-luminance; ~0.85 for a white plate rim)")
+    ap.add_argument("--file-target-luminance", type=float, help="target for --file-measure patches when --anchor patch (default: --target-luminance; ~0.75 for a white plate rim)")
+    ap.add_argument("--wb-strength", type=float, default=0.8, help="how much of a --file-measure correction to apply: 1 trusts the patch fully, 0.8 (default) keeps a fifth of the cast because a napkin, a wall or rice is not a card")
+    ap.add_argument("--wb-clamp", default="0.75,1.35", help="bounds for --file-measure gains; a patch that asks for more is not neutral")
+    ap.add_argument("--anchor", choices=["highlights", "patch"], default="highlights",
+                    help="what sets a --file-measure exposure: the frame's 95th-percentile luminance landing at --highlight-target (default, robust to a dim patch), or the patch at --file-target-luminance")
+    ap.add_argument("--highlight-target", type=float, default=0.90, help="with --anchor highlights: where the 95th percentile lands, sRGB 0-1")
     ap.add_argument("--exclude", nargs="+", metavar="FILE", help="files that are not dishes: skipped by grade, cutout, qa_report and deliver; repeatable")
     ap.add_argument("--clear-excludes", action="store_true")
     ap.add_argument("--note", help="free text stored in provenance")
@@ -166,13 +173,26 @@ def main() -> int:
         if fm.get("schema") != "dish-media.measure/1":
             C.die(f"{mpath} is not a measure.py file")
         r, g, b = fm["card_mean_linear"]
-        target = args.file_target_luminance if args.file_target_luminance is not None else args.target_luminance
-        wanted_lin = float(C.srgb_to_linear(C.invert_tone(target, session)))
+        lo, hi = (float(v) for v in args.wb_clamp.split(","))
+        strength = min(1.0, max(0.0, args.wb_strength))
+        gains = [min(hi, max(lo, (g / r) ** strength)), 1.0, min(hi, max(lo, (g / b) ** strength))]
         ov = dict(session["overrides"].get(C.stem_of(name)) or {})
-        ov["wb_gains"] = [round(g / r, 6), 1.0, round(g / b, 6)]
-        ov["exposure"] = round(wanted_lin / float(g), 6)
+        ov["wb_gains"] = [round(gains[0], 6), 1.0, round(gains[2], 6)]
+        if args.anchor == "highlights":
+            # the bright end of the frame (plates, rice, napkins) lands just under white; the patch only sets colour
+            p95 = float((fm.get("luminance_percentiles") or {}).get("y_p95") or 0)
+            if p95 <= 0:
+                C.die(f"{mpath} has no luminance percentiles; re-run measure.py")
+            wanted_lin = float(C.srgb_to_linear(C.invert_tone(args.highlight_target, session)))
+            ov["exposure"] = round(wanted_lin / float(C.srgb_to_linear(np.float32(p95))), 6)
+            how = f"p95 {p95:.2f} -> {args.highlight_target}"
+        else:
+            target = args.file_target_luminance if args.file_target_luminance is not None else args.target_luminance
+            wanted_lin = float(C.srgb_to_linear(C.invert_tone(target, session)))
+            ov["exposure"] = round(wanted_lin / float(g), 6)
+            how = f"patch -> {target}"
         session["overrides"][C.stem_of(name)] = ov
-        C.log(f"  {C.stem_of(name)}: own gains {ov['wb_gains']} exposure x{ov['exposure']} (patch -> {target})")
+        C.log(f"  {C.stem_of(name)}: own gains {ov['wb_gains']} (strength {strength}) exposure x{ov['exposure']} ({how})")
 
     # exclude list
     if args.clear_excludes:
@@ -183,7 +203,6 @@ def main() -> int:
 
     # predicted card in the output, for the record and for QA; without a new
     # measurement the card kept in provenance is used, so --from runs keep it
-    import numpy as np
     predicted, neutral_err = None, None
     card_lin = card["card_mean_linear"] if card is not None else ((prov.get("card") or {}).get("mean_linear"))
     if card_lin:
