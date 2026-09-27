@@ -474,18 +474,44 @@ def main() -> int:
         deliver = next((d for d in (out / "project" / "deliver" / "photos", out / "project" / "delivery") if d.is_dir() and list(d.glob("*.jpg"))), None)
         delivered = sorted(deliver.glob("*.jpg")) if deliver else [graded[st] for st in sorted(graded)]
 
-        def plate_rb(rgb8):
-            lin = C.srgb_to_linear(rgb8.astype(np.float32) / 255.0)
-            y = lin @ C.LUMA_709
-            chroma = np.abs(lin[..., 0] / np.maximum(lin[..., 1], 1e-4) - 1) + np.abs(lin[..., 2] / np.maximum(lin[..., 1], 1e-4) - 1)
-            bright = (y > np.percentile(y, 85)) & (y < 0.92)
-            cand = bright & (chroma <= np.percentile(chroma[bright], 20))   # the whitest fifth of the bright pixels: napkin, rim, rice; not an ochre plate
-            m = C.linear_to_srgb(lin[cand].reshape(-1, 3).mean(axis=0)) * 255
-            return float(m[0] - m[2])
-        rb = {pth.stem: round(plate_rb(C.load_rgb8(pth)), 1) for pth in delivered}
-        warm_ok = sum(1 for v in rb.values() if 1.0 <= v <= 12.0)
-        res["plates_warm_not_cold"] = (bool(rb) and warm_ok >= 0.8 * len(rb), f"R-B of the plate whites per photo {json.dumps(rb)}; {warm_ok}/{len(rb)} within +1..+12")
-
+        # the patch each file was measured on, found again in the output through that file's own geometry
+        import grade as G
+        import cv2
+        session_d = json.loads(sess.read_text()) if sess else None
+        measures = {}
+        for mj in out.rglob("*.json"):
+            if mj.parent.name != "measure":
+                continue
+            try:
+                d = json.loads(mj.read_text())
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            if d.get("schema") == "dish-media.measure/1" and d.get("card_region") and d.get("image"):
+                measures[Path(d.get("source") or mj.stem).stem] = d
+        patch = {}
+        for pth in delivered:
+            d = measures.get(pth.stem)
+            if not d or not session_d:
+                patch[pth.stem] = None
+                continue
+            reg, im_ = d["card_region"], d["image"]
+            mask = np.zeros((int(im_["height"]), int(im_["width"]), 3), dtype=np.uint8)
+            mask[int(reg["y"]):int(reg["y"]) + int(reg["h"]), int(reg["x"]):int(reg["x"]) + int(reg["w"])] = 255
+            m = G.apply_geometry(mask, C.params_for(session_d, pth.name))
+            outimg = C.load_rgb8(pth)
+            sel = cv2.resize(m, (outimg.shape[1], outimg.shape[0]), interpolation=cv2.INTER_AREA)[..., 0] > 200
+            if sel.sum() < 16:
+                patch[pth.stem] = None   # the patch was cropped out
+                continue
+            lin = C.srgb_to_linear(outimg[sel].astype(np.float32) / 255.0).reshape(-1, 3).mean(axis=0)
+            s = C.linear_to_srgb(lin) * 255.0
+            patch[pth.stem] = (round(float(s[0] - s[2]), 1), round(float(max(abs(s[0] - s[1]), abs(s[2] - s[1]))), 1), round(float(C.linear_to_srgb(lin @ C.LUMA_709)), 3))
+        have = {k: v for k, v in patch.items() if v}
+        warm_ok = sum(1 for rb_, dev, _ in have.values() if 0.0 <= rb_ <= 12.0 and dev <= 12.0)
+        res["patch_neutral_warm"] = (bool(have) and warm_ok >= 0.8 * len(have),
+                                     f"each file's own white patch in the output as (R-B, max channel dev, Y): {json.dumps(patch)}; {warm_ok}/{len(have)} neutral with warmth, {len(patch) - len(have)} without a usable patch")
+        bright_ok = sum(1 for _, _, yv in have.values() if 0.66 <= yv <= 0.86)
+        res["patch_bright"] = (bool(have) and bright_ok >= 0.8 * len(have), f"{bright_ok}/{len(have)} patches land at Y 0.66-0.86 (values above)")
         import cutout as CO
         model, _ = CO.load_model(CO.DEFAULT_MODEL)
         mattes = {}
@@ -495,17 +521,6 @@ def main() -> int:
                 mattes[pth] = CO.matte_for(C.load_rgb8(pth), model)
             return mattes[pth]
 
-        def subject_median(pth):
-            # the dish and its vessel (rembg matte), not the whole frame: a stronger curve darkens the table around a brighter plate
-            y = (C.load_rgb8(pth).astype(np.float32) / 255.0) @ C.LUMA_709
-            m = matte(pth) > 0.5
-            return float(np.median(y[m] if m.mean() > 0.02 else y))
-        lifted = {}
-        for n in T["dark"]:
-            st = Path(n).stem
-            if st in graded:
-                lifted[st] = (round(subject_median(INPUTS / name / "raw" / "photos" / n), 3), round(subject_median(graded[st]), 3))
-        res["dark_frames_lifted"] = (bool(lifted) and all(b - a >= 0.08 for a, b in lifted.values()), f"source -> graded Y50 {json.dumps(lifted)}")
         p95 = {pth.stem: C.image_stats(C.load_rgb8(pth))["y_p95"] for pth in delivered}
         spread = (max(p95.values()) - min(p95.values())) if p95 else 9
         res["batch_even"] = (bool(p95) and spread <= 0.20, f"plate p95 per photo spread {spread:.2f} (limit 0.20)")

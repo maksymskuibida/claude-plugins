@@ -114,8 +114,8 @@
       "expectations": [
         "Every one of the 24 photos has a graded output JPEG, or is excluded with a stated content reason",
         "Delivered photos are JPEG with an sRGB profile or no profile, long edge at most 2560 px, orientation baked in",
-        "Plates read warm, not cold: in at least 80% of the delivered photos the bright low-chroma pixels have R-B between +1 and +12 (of 255) after correction",
-        "Dark frames are lifted: merida_dinner, roast_pork_katowice, steak_sandwich and short_rib_biryani gain at least 0.08 in subject median luminance versus the source",
+        "Plates read warm, not cold: in at least 80% of the delivered photos the white patch that file was measured on lands neutral with a touch of warmth in the output (R-B between 0 and +12 of 255, no channel more than 12 from green)",
+        "Whites land bright and alike: in at least 80% of the delivered photos that white patch has an output luminance between 0.66 and 0.86, so a dark bar shot sits beside a daylight one",
         "The batch is even: the plate brightness (95th-percentile luminance) of the delivered photos spans at most 0.20",
         "The vessel is whole: no delivered photo cuts the plate (matte touching the frame edge on more than 1% of the border) unless the source already did",
         "The street exterior (zhongshan_dinner) and the packaging shot (rippa_box) are excluded or named as not dish photos",

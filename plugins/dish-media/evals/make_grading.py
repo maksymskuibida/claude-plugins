@@ -26,7 +26,7 @@ KEYS = {
                      "contact_sheets", "qa_report", "manual:reshoot_advice", "originals_untouched"],
     "loops-real": ["dish_loops_format_baker_excluded", "loops_seamless", "partial_as_pingpong", "hdr_tonemapped", "portrait_kept",
                    "direction_recorded_and_odd_one_flagged", "frame_grids", "session_look_applied", "originals_untouched"],
-    "amateur-menu": ["all_graded_or_excluded", "delivery_format", "plates_warm_not_cold", "dark_frames_lifted", "batch_even", "vessel_whole",
+    "amateur-menu": ["all_graded_or_excluded", "delivery_format", "patch_neutral_warm", "patch_bright", "batch_even", "vessel_whole",
                      "non_dish_excluded", "contact_sheets", "qa_report", "manual:reshoot_advice", "originals_untouched"],
     "amateur-clips": ["dish_clips_delivered_or_declined", "no_fake_revolution", "non_dish_excluded", "white_balance_measured_per_clip",
                       "clips_warm_not_cold", "frame_grids", "manual:reshoot_instructions", "originals_untouched"],
