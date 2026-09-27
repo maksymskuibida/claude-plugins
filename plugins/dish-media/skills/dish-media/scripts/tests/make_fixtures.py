@@ -111,9 +111,10 @@ def write_video(path: Path, fps: int = 30, seconds: int = 12, period: float = 8.
     cv2.rectangle(bg, (40, 40), (w - 40, h - 40), (92, 92, 92), 2)
     cmd = ["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}", "-r", str(fps), "-i", "-",
            "-an", "-c:v", "libx264", "-preset", "fast", "-crf", "16", "-g", "30"]
-    # tags travel with the frames (setparams); output-only options are dropped by this ffmpeg
+    # tags travel with the frames (setparams); output-only options are dropped by this ffmpeg.
+    # The HDR variant is a real HLG encode (bt709 -> linear -> bt2020 HLG), not SDR pixels with HDR tags.
     if hdr:
-        cmd += ["-vf", "setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc:range=tv", "-pix_fmt", "yuv420p10le"]
+        cmd += ["-vf", "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv,zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt2020,zscale=t=arib-std-b67:m=2020_ncl:r=tv,format=yuv420p10le", "-pix_fmt", "yuv420p10le"]
     else:
         cmd += ["-vf", "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv", "-pix_fmt", "yuv420p"]
     cmd += ["-movflags", "+faststart", str(path)]

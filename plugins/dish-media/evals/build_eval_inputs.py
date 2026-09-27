@@ -66,7 +66,7 @@ def ffmpeg(*args: str) -> None:
 
 def phone_clip(src: Path, dst: Path, speed: float, seconds: float, hdr: bool = False) -> None:
     """Loop the render twice, speed it up, cut `seconds`, encode like a phone."""
-    tags = ("setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc:range=tv" if hdr
+    tags = ("setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv,zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt2020,zscale=t=arib-std-b67:m=2020_ncl:r=tv,format=yuv420p10le" if hdr
             else "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv")
     vf = f"setpts=PTS/{speed},fps=30,{tags}"
     enc = ["-c:v", "libx264", "-preset", "fast", "-crf", "18", "-movflags", "+faststart"]
@@ -155,7 +155,7 @@ def main() -> int:
     (s5 / "work").mkdir(parents=True)
     real = dl / "video-real"
     def real_clip(src: Path, dst: Path, hdr: bool = False):
-        tags = ("setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc:range=tv" if hdr
+        tags = ("setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv,zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt2020,zscale=t=arib-std-b67:m=2020_ncl:r=tv,format=yuv420p10le" if hdr
                 else "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv")
         enc = ["-c:v", "libx264", "-preset", "fast", "-crf", "18", "-movflags", "+faststart"]
         enc += ["-pix_fmt", "yuv420p10le"] if hdr else ["-pix_fmt", "yuv420p"]

@@ -120,7 +120,7 @@ A session, as Claude drives it through the skill (`S` is the skill's `scripts/` 
 | `contact_sheet.py` | 5 × 4 thumbnails with diagnostics, reference first, ≤ 1568 px; `--variants` mode |
 | `loop_period.py` | revolution period by normalised cross-correlation against the reference frame, turning direction from optical flow |
 | `video_grade.py`, `video_loop.sh` | trim, LUT from the session, optional vidstab, `revolution` or `pingpong` loop, 1080p H.264 yuv420p CRF 20 faststart |
-| `tonemap_hdr.sh` | HLG/PQ → SDR bt709 (zscale linear → Hable → bt709) for clips shot in HDR by mistake |
+| `tonemap_hdr.sh` | HLG/PQ → SDR bt709 (zscale linear → Mobius → bt709; `TONEMAP=hable` to override) for clips shot in HDR by mistake |
 | `frame_grid.py` | 3 × 3 frames of an exported loop with a seam score, ≤ 1568 px |
 | `qa_report.py` | merges every flag plus batch outliers, direction mismatches and missing outputs into `qa/report.md` |
 | `deliver.py` | assembles `deliver/` from cutouts or photos and loops; refuses while errors remain |

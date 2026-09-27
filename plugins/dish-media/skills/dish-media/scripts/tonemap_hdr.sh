@@ -3,20 +3,25 @@
 #
 #   tonemap_hdr.sh IN.mov OUT.mov [hlg|pq]
 #
-# Linearises with zscale, tone-maps with the Hable operator (keeps shadow
-# detail better than Reinhard), re-encodes as a high-quality SDR
-# intermediate for video_grade.py. The transfer is read from the file's
-# tags; pass hlg or pq when the clip is untagged. This is a repair, not a
-# workflow: turn HDR video off in the phone's camera app (iPhone: Settings >
-# Camera > Record Video > HDR Video; Android: the HDR10+ / HDR video switch)
-# and shoot SDR, then none of this is needed.
+# Linearises with zscale, tone-maps with the Mobius operator (TONEMAP=hable
+# or reinhard to override), re-encodes as a high-quality SDR intermediate
+# for video_grade.py. Mobius keeps the midtones where the phone put them
+# and compresses only real highlights; on a round trip of SDR-range
+# content it lands within 0.03 of the original, where Hable darkens the
+# frame by about a third and desaturates it. The transfer is read from the
+# file's tags; pass hlg or pq when the clip is untagged. This is a repair,
+# not a workflow: turn HDR video off in the phone's camera app (iPhone:
+# Settings > Camera > Record Video > HDR Video; Android: the HDR10+ / HDR
+# video switch) and shoot SDR, then none of this is needed.
 set -euo pipefail
 
 if [ $# -lt 2 ]; then
-  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 fi
 in="$1"; out="$2"; mode="${3:-auto}"
+op="${TONEMAP:-mobius}"
+case "$op" in mobius|hable|reinhard|clip) ;; *) echo "TONEMAP must be mobius, hable, reinhard or clip" >&2; exit 2 ;; esac
 command -v ffmpeg >/dev/null || { echo "ffmpeg not found" >&2; exit 2; }
 command -v ffprobe >/dev/null || { echo "ffprobe not found" >&2; exit 2; }
 
@@ -34,8 +39,8 @@ case "$mode" in
 esac
 
 # Explicit input tags so an untagged 10-bit clip is still read as bt2020 HDR.
-vf="zscale=tin=${tin}:pin=bt2020:min=bt2020nc:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
-echo "tone-mapping $in ($tin -> bt709) -> $out" >&2
+vf="zscale=tin=${tin}:pin=bt2020:min=bt2020nc:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=${op}:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
+echo "tone-mapping $in ($tin -> bt709, $op) -> $out" >&2
 ffmpeg -v error -y -i "$in" -vf "$vf" -an \
   -c:v libx264 -preset medium -crf 16 -pix_fmt yuv420p \
   -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv \
