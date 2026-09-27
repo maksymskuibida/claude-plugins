@@ -6,7 +6,7 @@
     calibrate.py --from work/session.json --out work/session.json \
         --override dish-0412 exposure_ev=0.3 saturation=0.95
     calibrate.py --from work/session.json --out work/session.json \
-        --file-measure dish-0431 work/measure/dish-0431.json --file-target-luminance 0.85
+        --file-measure dish-0431 work/measure/dish-0431.json --file-target-luminance 0.75
     calibrate.py --from work/session.json --out work/session.json --exclude IMG_0008 IMG_0009
 
 White balance gains make the card neutral in linear light. Exposure is the
@@ -75,10 +75,10 @@ def main() -> int:
                     help="per-file white balance and exposure from that file's own measurement (a plate rim, a card in "
                          "that frame); stored as an override; repeatable")
     ap.add_argument("--file-target-luminance", type=float, help="target for --file-measure patches when --anchor patch (default: --target-luminance; ~0.75 for a white plate rim)")
-    ap.add_argument("--wb-strength", type=float, default=0.8, help="how much of a --file-measure correction to apply: 1 trusts the patch fully, 0.8 (default) keeps a fifth of the cast because a napkin, a wall or rice is not a card")
-    ap.add_argument("--wb-clamp", default="0.75,1.35", help="bounds for --file-measure gains; a patch that asks for more is not neutral")
-    ap.add_argument("--anchor", choices=["highlights", "patch"], default="highlights",
-                    help="what sets a --file-measure exposure: the frame's 95th-percentile luminance landing at --highlight-target (default, robust to a dim patch), or the patch at --file-target-luminance")
+    ap.add_argument("--wb-strength", type=float, default=1.0, help="how much of a --file-measure correction to apply: 1 (default) makes the patch neutral; 0.8 keeps a fifth of the cast, for one file whose only patch is doubtful (a batch damped this way was judged yellow next to a corrected one)")
+    ap.add_argument("--wb-clamp", default="0.5,2.0", help="sanity bounds for --file-measure gains; a patch that asks for more than a stop of colour is not neutral")
+    ap.add_argument("--anchor", choices=["patch", "highlights"], default="patch",
+                    help="what sets a --file-measure exposure: the patch landing at --file-target-luminance (default: every frame's white ends up at the same value, which lifts a dark frame and evens the batch), or the frame's 95th-percentile luminance landing at --highlight-target (for a file whose patch is much dimmer than its true whites)")
     ap.add_argument("--highlight-target", type=float, default=0.90, help="with --anchor highlights: where the 95th percentile lands, sRGB 0-1")
     ap.add_argument("--exclude", nargs="+", metavar="FILE", help="files that are not dishes: skipped by grade, cutout, qa_report and deliver; repeatable")
     ap.add_argument("--clear-excludes", action="store_true")

@@ -136,6 +136,8 @@ def main() -> int:
     full = (sess_fm["overrides"].get("dish-004") or {}).get("wb_gains", [1, 1, 1])
     damp = ovs.get("wb_gains", [1, 1, 1])
     check(abs(damp[0] - full[0] ** 0.8) < 1e-3 and abs(damp[2] - full[2] ** 0.8) < 1e-3, f"--wb-strength 0.8 applies 80% of the measured correction ({damp} vs full {full})")
+    r_, g_, b_ = json.loads((P / "work" / "measure" / "dish-004.json").read_text())["card_mean_linear"]
+    check(abs(full[0] - g_ / r_) < 1e-4 and abs(full[2] - g_ / b_) < 1e-4, f"--file-measure applies the measured correction in full by default ({full} vs g/r {g_ / r_:.4f}, g/b {g_ / b_:.4f})")
     snap_out = P / "out" / "photos-snapshot" / "dish-004.jpg"
     if snap_out.is_file():
         st = C.image_stats(C.load_rgb8(snap_out))

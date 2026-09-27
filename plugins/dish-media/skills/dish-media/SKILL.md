@@ -184,14 +184,19 @@ light) are a different job from a shoot, and the defaults change with them:
 
 - Each file gets its own measurement (`measure.py --auto --white`, checked on the
   preview; a wooden table, printed text or a coloured plate is not a neutral) and
-  `calibrate.py --file-measure`. That correction is applied at 80% by default
-  (`--wb-strength 0.8`) and clamped, because a napkin, a wall or rice is not a card: a
-  full correction from a wrong patch swings a frame blue or orange, a damped one leaves a
-  fifth of the cast and never ruins a file. Exposure comes from the frame's own
-  highlights (`--anchor highlights`: the 95th percentile lands at 0.90), so a dark frame
-  is lifted and a bright one is not clipped, whatever the patch's reflectance was.
-- Phone JPEGs are already contrasty and saturated: keep contrast at the default 2.5 and
-  set `--saturation 1.0`; the variants sheet decides, but it rarely asks for more.
+  `calibrate.py --file-measure NAME measure.json --file-target-luminance 0.75`. The
+  correction is applied in full: the patch becomes neutral (plus the session's warmth)
+  and lands at 0.75 in every frame. That is what puts a magenta-lit bar and a daylight
+  terrace on one screen, and what lifts a dark frame. A version that applied 80% of the
+  correction and left exposure to each frame's own highlights was judged flat and
+  yellow beside this one; `--wb-strength 0.8` and `--anchor highlights` remain for a
+  single file whose only patch is doubtful (a cream wall, a shaded napkin) and nothing
+  better can be measured. A frame that swings blue or orange after correction had a
+  wrong patch: re-pick that one, do not damp the batch.
+- Phone JPEGs from dim rooms are flatter than they looked on the phone. On the variants
+  sheet the stronger contrast column (4–4.5) usually wins for snapshots, and the 0.75
+  anchor leaves it headroom; check `clip` on the sheet as always. Saturation stays at
+  the default unless the sheet says otherwise.
 - `--crop-ratio none` unless the batch really shares an orientation: forcing 4:3 onto
   square and portrait snapshots cuts plates. Crop only to remove clutter, with
   `crop_box`, and keep the vessel whole.
@@ -199,8 +204,9 @@ light) are a different job from a shoot, and the defaults change with them:
   crop that touches the plate where the source did not. A flagged file is not delivered
   until its crop is widened.
 - Before delivering, make one before/after pair sheet of the three most-corrected files
-  (largest gains or exposure) and look at it: the damped correction should read as
-  "cleaner", never as a colour shift you can name.
+  (largest gains or exposure): `contact_sheet.py --in out/photos/a.jpg out/photos/b.jpg
+  out/photos/c.jpg --before work/photos --out qa/pairs.jpg`, and look at it. The
+  correction should read as "cleaner", never as a colour shift you can name.
 
 Two more things live in the session file. `--exclude IMG_0008 IMG_0009` lists files that
 are not dishes (an interior, a table shot with four plates, the card frame if it was
@@ -511,8 +517,9 @@ Blur and offset of the shadow are in pixels at 1600 px and scale with the output
   dish that was lit the same way. A spread of 0.4 means the light differed and the files
   need their own measurements (`--file-measure`), not a shared exposure nudge.
 - **A dark snapshot is not "moody", it is dark.** Guests compare dishes side by side on
-  one screen; the dark one loses. Highlight-anchored exposure lifts it; do not keep a
-  frame dark because the bar was dark.
+  one screen; the dark one loses. The per-file anchor (its white patch at 0.75) lifts
+  it; a frame with no white to measure gets an `exposure_ev` override instead. Do not
+  keep a frame dark because the bar was dark.
 
 ## Model note
 

@@ -3,11 +3,14 @@
 
     contact_sheet.py --in out/photos --out qa/sheets --reference dish-0412
     contact_sheet.py --in qa/variants --out qa/variants-sheet.jpg --variants
+    contact_sheet.py --in out/photos/a.jpg out/photos/b.jpg --before work/photos --out qa/pairs.jpg
 
 Default mode: pages of up to 20 thumbnails (5 x 4) on a neutral grey, the
 reference dish in the first cell of every page, and under each thumbnail
 the file name plus median luminance and clipping. --variants lays out the
 six calibration renders of one dish side by side with their settings.
+--before DIR puts the same-named file from DIR (the working copy, as shot)
+left of each thumbnail: before | after pairs, 10 files a page.
 Stats come from --stats (grade_stats.json) when present, else are computed.
 """
 from __future__ import annotations
@@ -97,21 +100,25 @@ def sub_line(st: dict) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--in", dest="inp", required=True, help="folder of JPEGs (or one file)")
+    ap.add_argument("--in", dest="inp", required=True, nargs="+", help="folders of JPEGs and/or single files")
     ap.add_argument("--out", required=True, help="a .jpg for one sheet, or a folder for paginated sheets")
     ap.add_argument("--reference", help="file (or stem) to show first on every page")
     ap.add_argument("--stats", help="grade_stats.json / cutout_stats.json for the labels")
-    ap.add_argument("--per-sheet", type=int, default=20)
-    ap.add_argument("--cols", type=int, default=5)
+    ap.add_argument("--per-sheet", type=int, help="files per page (default 20, or 10 with --before)")
+    ap.add_argument("--cols", type=int, help="thumbnails per row (default 5, or 4 with --before)")
+    ap.add_argument("--before", help="folder holding the as-shot version of each file (work/photos): render before | after pairs")
     ap.add_argument("--max-edge", type=int, default=1568)
     ap.add_argument("--aspect", type=float, default=4 / 3, help="thumbnail cell aspect (w/h)")
     ap.add_argument("--variants", action="store_true", help="lay out grade.py --variants renders, 3 per row")
     ap.add_argument("--title", default="", help="text for the header")
     args = ap.parse_args()
 
-    files = C.list_images(args.inp)
+    files = [f for src in args.inp for f in C.list_images(src)]
     if not files:
-        C.die(f"no images in {args.inp}")
+        C.die(f"no images in {' '.join(args.inp)}")
+    before = {q.stem: q for q in C.list_images(args.before)} if args.before else None
+    cols = args.cols or (4 if before is not None else 5)
+    per_sheet = args.per_sheet or (10 if before is not None else 20)
     table = {}
     if args.stats and Path(args.stats).is_file():
         table = json.loads(Path(args.stats).read_text())
@@ -138,7 +145,7 @@ def main() -> int:
         C.log(f"{out} {size[0]}x{size[1]} ({len(items)} variants)")
         return 0
 
-    per = args.per_sheet - (1 if ref else 0)
+    per = per_sheet - (1 if ref else 0)
     pages = [files[i:i + per] for i in range(0, len(files), per)] or [[]]
     out = Path(args.out)
     single = out.suffix.lower() in (".jpg", ".jpeg")
@@ -154,10 +161,15 @@ def main() -> int:
         items = [ref_item] if ref_item else []
         for f in page:
             rgb8 = C.load_rgb8(f)
+            if before is not None:
+                b = before.get(f.stem)
+                brgb = C.load_rgb8(b) if b else np.full((3, 4, 3), GREY, dtype=np.uint8)
+                items.append({"rgb8": brgb, "title": f"before  {f.stem}", "sub": sub_line(C.image_stats(brgb)) if b else "(no file in --before)"})
             items.append({"rgb8": rgb8, "title": f.stem, "sub": sub_line(stats_for(f, rgb8, table))})
         dst = out if single else out / f"sheet-{n:02d}.jpg"
-        head = args.title or f"sheet {n}/{len(pages)}  {len(page)} dishes" + ("  + reference (yellow frame)" if ref else "") + "  grey = neutral"
-        size = render_sheet(items, args.cols, args.max_edge, head, args.aspect, dst)
+        head = args.title or (f"before | after, {len(page)} dishes  grey = neutral" if before is not None
+                              else f"sheet {n}/{len(pages)}  {len(page)} dishes" + ("  + reference (yellow frame)" if ref else "") + "  grey = neutral")
+        size = render_sheet(items, cols, args.max_edge, head, args.aspect, dst)
         C.log(f"{dst} {size[0]}x{size[1]}: {page[0].stem if page else '-'} .. {page[-1].stem if page else '-'}")
     return 0
 

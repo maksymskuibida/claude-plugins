@@ -478,16 +478,28 @@ def main() -> int:
             lin = C.srgb_to_linear(rgb8.astype(np.float32) / 255.0)
             y = lin @ C.LUMA_709
             chroma = np.abs(lin[..., 0] / np.maximum(lin[..., 1], 1e-4) - 1) + np.abs(lin[..., 2] / np.maximum(lin[..., 1], 1e-4) - 1)
-            cand = (y > np.percentile(y, 85)) & (y < 0.92) & (chroma < np.percentile(chroma, 40))
+            bright = (y > np.percentile(y, 85)) & (y < 0.92)
+            cand = bright & (chroma <= np.percentile(chroma[bright], 20))   # the whitest fifth of the bright pixels: napkin, rim, rice; not an ochre plate
             m = C.linear_to_srgb(lin[cand].reshape(-1, 3).mean(axis=0)) * 255
             return float(m[0] - m[2])
         rb = {pth.stem: round(plate_rb(C.load_rgb8(pth)), 1) for pth in delivered}
         warm_ok = sum(1 for v in rb.values() if 1.0 <= v <= 12.0)
         res["plates_warm_not_cold"] = (bool(rb) and warm_ok >= 0.8 * len(rb), f"R-B of the plate whites per photo {json.dumps(rb)}; {warm_ok}/{len(rb)} within +1..+12")
 
+        import cutout as CO
+        model, _ = CO.load_model(CO.DEFAULT_MODEL)
+        mattes = {}
+
+        def matte(pth):
+            if pth not in mattes:
+                mattes[pth] = CO.matte_for(C.load_rgb8(pth), model)
+            return mattes[pth]
+
         def subject_median(pth):
-            a = C.load_rgb8(pth); f = a.astype(np.float32) / 255.0
-            return float(np.median(f @ C.LUMA_709))
+            # the dish and its vessel (rembg matte), not the whole frame: a stronger curve darkens the table around a brighter plate
+            y = (C.load_rgb8(pth).astype(np.float32) / 255.0) @ C.LUMA_709
+            m = matte(pth) > 0.5
+            return float(np.median(y[m] if m.mean() > 0.02 else y))
         lifted = {}
         for n in T["dark"]:
             st = Path(n).stem
@@ -497,13 +509,11 @@ def main() -> int:
         p95 = {pth.stem: C.image_stats(C.load_rgb8(pth))["y_p95"] for pth in delivered}
         spread = (max(p95.values()) - min(p95.values())) if p95 else 9
         res["batch_even"] = (bool(p95) and spread <= 0.20, f"plate p95 per photo spread {spread:.2f} (limit 0.20)")
-        import cutout as CO
-        model, _ = CO.load_model(CO.DEFAULT_MODEL)
         cuts = {}
         for pth in delivered:
             src = INPUTS / name / "raw" / "photos" / f"{pth.stem}.jpg"
-            a_out = CO.confidence(CO.matte_for(C.load_rgb8(pth), model))[1]["border_touch"]
-            a_src = CO.confidence(CO.matte_for(C.load_rgb8(src), model))[1]["border_touch"] if src.is_file() else 0.0
+            a_out = CO.confidence(matte(pth))[1]["border_touch"]
+            a_src = CO.confidence(matte(src))[1]["border_touch"] if src.is_file() else 0.0
             cuts[pth.stem] = (round(a_out, 3), round(a_src, 3))
         bad_cut = [k for k, (o, s_) in cuts.items() if o > 0.01 and o > s_ + 0.005]
         res["vessel_whole"] = (bool(cuts) and not bad_cut, f"cut worse than source: {bad_cut}; per photo out/src {json.dumps(cuts)}")
