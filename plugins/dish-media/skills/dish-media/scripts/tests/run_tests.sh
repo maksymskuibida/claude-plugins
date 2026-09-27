@@ -62,8 +62,10 @@ run_pipeline() {  # PROJECT SESSION_SOURCE(optional)
   if [ -n "$src" ]; then
     mkdir -p "$D/work" && cp "$src" "$D/work/session.json"
   else
-    python3 "$S/calibrate.py" --measure "$D/work/measure/card.json" --out "$D/work/session.json" --crop-ratio none \
+    python3 "$S/calibrate.py" --measure "$D/work/measure/card.json" --out "$D/work/session.json" --crop-ratio none --warmth 0 \
       --background '#F6F4EF' --override dish-005 straighten_deg=2.0 --note "regression fixture" 2>/dev/null
+    python3 "$S/calibrate.py" --measure "$D/work/measure/card.json" --out "$D/work/session-warm.json" --crop-ratio none 2>/dev/null
+    python3 "$S/grade.py" --session "$D/work/session-warm.json" --in "$D/work/photos/dish-001.jpg" --out "$D/out/photos-warm" 2>/dev/null
   fi
   python3 "$S/grade.py" --session "$D/work/session.json" --variants "$D/work/photos/dish-001.jpg" --out "$D/qa/variants" 2>/dev/null
   python3 "$S/contact_sheet.py" --in "$D/qa/variants" --out "$D/qa/variants.jpg" --variants 2>/dev/null

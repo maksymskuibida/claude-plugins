@@ -117,11 +117,15 @@ def main() -> int:
                 computed.append({"file": f"{k}.jpg", "code": "cast_outlier", "value": round(dist, 4),
                                  "detail": f"bright-pixel OKLab a/b ({a:+.3f},{b:+.3f}) vs batch ({a0:+.3f},{b0:+.3f})"})
     if session:
-        pred = (session.get("provenance") or {}).get("predicted_card_srgb255")
-        tol = ((session.get("provenance") or {}).get("targets") or {}).get("neutral_tolerance_255", 1.0)
-        if pred and max(abs(pred[0] - pred[1]), abs(pred[2] - pred[1])) > tol:
+        prov = session.get("provenance") or {}
+        pred = prov.get("predicted_card_srgb255")
+        tol = (prov.get("targets") or {}).get("neutral_tolerance_255", 1.0)
+        err = prov.get("card_neutral_error_255")
+        if err is None and pred:      # a session written before warmth existed: the prediction is the neutralised card
+            err = max(abs(pred[0] - pred[1]), abs(pred[2] - pred[1]))
+        if err is not None and err > tol:
             computed.append({"file": "session.json", "code": "card_not_neutral", "severity": "error",
-                             "detail": f"predicted card {pred}, tolerance {tol}/255"})
+                             "detail": f"the correction leaves the card {err}/255 off neutral before warmth (tolerance {tol}/255); predicted card {pred}"})
     # rotation direction: every loop on one menu should turn the same way
     dirs = {k: v.get("direction") for k, v in sorted(vstats.items()) if isinstance(v, dict) and v.get("direction") in ("cw", "ccw")}
     if len(set(dirs.values())) > 1:
@@ -167,7 +171,8 @@ def main() -> int:
                      f"background {session.get('background')}, {len(session.get('overrides') or {})} override(s), "
                      f"{len(session.get('exclude') or [])} excluded")
         if prov.get("predicted_card_srgb255"):
-            lines.append(f"- predicted card: {prov['predicted_card_srgb255']} (target {round(prov['targets']['card_luminance_srgb'] * 255, 1)})")
+            lines.append(f"- predicted card: {prov['predicted_card_srgb255']} (target {round(prov['targets']['card_luminance_srgb'] * 255, 1)}, "
+                         f"warmth {prov.get('warmth', session.get('warmth', 0))}, neutral error before warmth {prov.get('card_neutral_error_255', '?')}/255)")
     if meds:
         lines.append(f"- graded: {len(meds)} files, Y50 median {statistics.median(meds.values()):.3f}, "
                      f"range {min(meds.values()):.3f}..{max(meds.values()):.3f}")

@@ -162,11 +162,19 @@ honest way to make mixed sources match.
 python3 "$S/calibrate.py" --measure "$P/work/measure/card.json" --out "$P/work/session.json"
 ```
 
-This writes the full parameter set: `wb_gains` that make the card neutral, an `exposure`
-that puts the card at 0.48 (sRGB, 0–1) **in the output JPEG, after the tone curve**, and
-the default look: contrast `{strength 2.5, midpoint 0.48}`, `shadows 0.10`,
-`highlights 0.15`, `saturation 1.05`, `crop_ratio 4:3`, `output_long_edge 1600`, no
-background. Any value can be set with a flag (`--contrast-strength 3.5 --saturation 1.0
+This writes the full parameter set: `wb_gains` that make the card neutral, a `warmth`
+of 0.04 kept on top of that, an `exposure` that puts the card at 0.48 (sRGB, 0–1) **in
+the output JPEG, after the tone curve**, and the default look: contrast
+`{strength 2.5, midpoint 0.48}`, `shadows 0.10`, `highlights 0.15`, `saturation 1.05`,
+`crop_ratio 4:3`, `output_long_edge 1600`, no background.
+
+Warmth is deliberate. A plate corrected to exactly neutral is physically right and reads
+cold on a menu: food is lit warm in every restaurant and guests expect it. The card sets
+the reference; `warmth` (linear gains of 1+w on red and 1−w on blue, luminance kept)
+adds back a controlled amount, the same on every file, so the batch is still consistent.
+0 is clinical, 0.04 gentle, 0.08 candle-light. Judge it on the variants sheet, not per
+file; QA still checks the correction itself (`card_neutral_error_255` in the session
+provenance), not the warmth you chose. Any value can be set with a flag (`--contrast-strength 3.5 --saturation 1.0
 --crop-ratio 1:1 --background '#F6F4EF'`); re-running with `--from` keeps what is not
 re-specified, including overrides. Because exposure is solved through the curve, changing
 contrast or shadows here keeps the card on target; hand-editing the JSON does not.
@@ -178,11 +186,16 @@ nothing has to be deleted by hand. `--file-measure NAME measure.json` turns a me
 taken in that one frame into per-file gains and exposure (an override), for a dish shot
 under a different light than the session's card.
 
-If the clips were shot with different exposure than the photos (video ISO and shutter
-differ), shoot the card on video too, grab a frame and calibrate a second session from it
-while keeping the look: `ffmpeg -ss 1 -i card.mov -frames:v 1 card-video.jpg`, then
-`measure.py`, then `calibrate.py --from "$P/work/session.json" --measure card-video.json
---out "$P/work/session-video.json"`. Use that file for step 10.
+Clips get the photo session's look, but not blindly its white balance. The phone
+exposes and balances video differently from stills, and a session measured on one
+evening's card must not be applied to clips from another light: the result is a cold or
+yellow loop next to a correct photo. Shoot the card on video too, grab a frame and
+calibrate a second session from it while keeping the look: `ffmpeg -ss 1 -i card.mov
+-frames:v 1 card-video.jpg`, then `measure.py`, then `calibrate.py --from
+"$P/work/session.json" --measure card-video.json --out "$P/work/session-video.json"`.
+Use that file for step 10. No card on video: grab a frame from each clip, `measure.py
+--auto --white` on it, and `calibrate.py --file-measure <clip stem> … --file-target-luminance
+0.75`; overrides apply to clips by stem and give each clip its own LUT.
 
 ### 4. Variants sheet: the one place Claude chooses a look
 

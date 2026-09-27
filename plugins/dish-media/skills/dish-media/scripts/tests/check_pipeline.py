@@ -104,6 +104,13 @@ def main() -> int:
     with Image.open(P / "out" / "photos" / "dish-001.jpg") as im:
         check(max(im.size) == session["output_long_edge"] and im.info.get("icc_profile") is not None and "exif" not in im.info,
               "delivery JPEG: output_long_edge, sRGB profile, no EXIF")
+    warm = P / "out" / "photos-warm" / "dish-001.jpg"
+    if warm.is_file():
+        m = card_in_output(warm, truth)
+        sw = C.load_session(P / "work" / "session-warm.json")
+        check(sw.get("warmth") == 0.04 and 3.0 <= m[0] - m[2] <= 7.0 and abs(m.mean() - target) / target <= 0.03,
+              f"default warmth 0.04 leaves the card gently warm at the same luminance (R-B {m[0] - m[2]:.1f}, mean {m.mean():.1f})")
+        check((sw["provenance"].get("card_neutral_error_255") or 0) <= 1.0, "the correction's own neutral error is recorded and small")
     stats = json.loads((P / "qa" / "grade_stats.json").read_text())
     check(stats["dish-004"]["y_median"] > stats["dish-001"]["y_median"] + 0.05, "the +0.5 EV outlier dish is measurably brighter")
     check(any(f["code"] == "clip_high" and f["file"] == "dish-004.jpg" for f in flags), "the outlier dish was flagged clip_high by grade.py")

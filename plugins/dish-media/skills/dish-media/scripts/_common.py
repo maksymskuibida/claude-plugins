@@ -27,6 +27,7 @@ JPEG_SUBSAMPLING = 2  # 4:2:0, what every camera and tablet decoder expects
 # Default look. calibrate.py writes these into session.json; grade.py and
 # video_grade.py read them back. Change them there, not here.
 DEFAULT_LOOK = {
+    "warmth": 0.04,   # keep a little of the room's warmth: a plate at exactly neutral reads cold on a menu
     "contrast": {"strength": 2.5, "midpoint": 0.48},
     "shadows": 0.10,
     "highlights": 0.15,
@@ -40,7 +41,7 @@ DEFAULT_LOOK = {
 
 # Flat override keys that map onto nested session values.
 OVERRIDE_KEYS = {
-    "exposure", "exposure_ev", "wb_gains", "contrast_strength", "contrast_midpoint",
+    "exposure", "exposure_ev", "wb_gains", "warmth", "contrast_strength", "contrast_midpoint",
     "shadows", "highlights", "saturation", "crop_ratio", "straighten_deg",
     "crop_center", "crop_scale", "crop_box", "output_long_edge", "background", "shadow",
     # video-only
@@ -174,9 +175,16 @@ def invert_tone(target: float, look: dict, iters: int = 60) -> float:
 # The look: linear sRGB in, linear sRGB out
 # --------------------------------------------------------------------------
 
+def warmth_gains(warmth: float) -> np.ndarray:
+    """Linear gains for a warm bias: +warmth on red, -warmth on blue, luminance kept."""
+    w = float(warmth or 0.0)
+    g = np.array([1.0 + w, 1.0, 1.0 - w], dtype=np.float32)
+    return g / np.float32(g @ LUMA_709)
+
+
 def apply_look_linear(lin: np.ndarray, look: dict) -> np.ndarray:
-    """WB gains, exposure, tone (ratio-preserving on luminance), saturation."""
-    gains = np.asarray(look["wb_gains"], dtype=np.float32)
+    """WB gains, warmth, exposure, tone (ratio-preserving on luminance), saturation."""
+    gains = np.asarray(look["wb_gains"], dtype=np.float32) * warmth_gains(look.get("warmth", 0.0))
     lin = lin * gains * np.float32(look["exposure"])
     y = luminance(lin)
     y_c = np.clip(y, 1e-6, 1.0)

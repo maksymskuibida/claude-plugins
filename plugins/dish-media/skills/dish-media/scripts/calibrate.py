@@ -53,6 +53,7 @@ def main() -> int:
     ap.add_argument("--wb-gains", help="manual R,G,B linear gains (skips the card)")
     ap.add_argument("--exposure", type=float, help="manual linear exposure multiplier (skips the card)")
     ap.add_argument("--exposure-ev", type=float, default=0.0, help="extra stops on top of the derived exposure")
+    ap.add_argument("--warmth", type=float, help="warm bias kept after neutralising the card: 0 is clinically neutral, 0.04 (default) a gentle warmth, 0.08 candle-light")
     ap.add_argument("--contrast-strength", type=float)
     ap.add_argument("--contrast-midpoint", type=float)
     ap.add_argument("--shadows", type=float)
@@ -87,7 +88,7 @@ def main() -> int:
         session["contrast"]["strength"] = args.contrast_strength
     if args.contrast_midpoint is not None:
         session["contrast"]["midpoint"] = args.contrast_midpoint
-    for key in ("shadows", "highlights", "saturation", "straighten_deg", "output_long_edge"):
+    for key in ("warmth", "shadows", "highlights", "saturation", "straighten_deg", "output_long_edge"):
         val = getattr(args, key)
         if val is not None:
             session[key] = val
@@ -105,6 +106,8 @@ def main() -> int:
         val = getattr(args, f"shadow_{key}")
         if val is not None:
             session["shadow"][key] = val
+    if not (-0.15 <= float(session.get("warmth") or 0) <= 0.15):
+        C.die("warmth must be within -0.15..0.15")
     if not (0 <= session["highlights"] <= 1) or not (-1 <= session["shadows"] <= 1):
         C.die("shadows must be within -1..1 and highlights within 0..1 (the curve stops being monotonic beyond)")
     if session["contrast"]["strength"] < 0:
@@ -181,34 +184,39 @@ def main() -> int:
     # predicted card in the output, for the record and for QA; without a new
     # measurement the card kept in provenance is used, so --from runs keep it
     import numpy as np
-    predicted = None
+    predicted, neutral_err = None, None
     card_lin = card["card_mean_linear"] if card is not None else ((prov.get("card") or {}).get("mean_linear"))
     if card_lin:
         lin = np.asarray(card_lin, dtype=np.float32)[None, None, :]
         out = C.linear_to_srgb(C.apply_look_linear(lin, session))[0, 0] * 255.0
-        predicted = [round(float(v), 2) for v in out]
+        predicted = [round(float(v), 2) for v in out]          # what the card will look like, warmth included
+        flat = dict(session); flat["warmth"] = 0.0
+        out0 = C.linear_to_srgb(C.apply_look_linear(lin, flat))[0, 0] * 255.0
+        neutral_err = round(float(max(abs(out0[0] - out0[1]), abs(out0[2] - out0[1]))), 2)   # the correction's own error
 
     prov.update({
         "created": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "script_version": C.SCRIPT_VERSION,
         "targets": {"card_luminance_srgb": args.target_luminance, "neutral_tolerance_255": args.neutral_tolerance},
         "predicted_card_srgb255": predicted,
+        "card_neutral_error_255": neutral_err,
+        "warmth": session.get("warmth", 0.0),
     })
     if args.note:
         prov["note"] = args.note
     session["provenance"] = prov
     ordered = {"schema": C.SESSION_SCHEMA, "provenance": prov}
-    for k in ("wb_gains", "exposure", "contrast", "shadows", "highlights", "saturation", "crop_ratio",
+    for k in ("wb_gains", "warmth", "exposure", "contrast", "shadows", "highlights", "saturation", "crop_ratio",
               "straighten_deg", "output_long_edge", "background", "shadow", "exclude", "overrides"):
         ordered[k] = session[k]
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     C.save_session(args.out, ordered)
     ev = math.log2(float(session["exposure"])) if session["exposure"] > 0 else float("nan")
-    C.log(f"wb_gains {session['wb_gains']}  exposure x{session['exposure']} ({ev:+.2f} EV)  "
+    C.log(f"wb_gains {session['wb_gains']}  warmth {session.get('warmth', 0)}  exposure x{session['exposure']} ({ev:+.2f} EV)  "
           f"contrast {session['contrast']}  shadows {session['shadows']}  highlights {session['highlights']}  "
           f"saturation {session['saturation']}")
     if predicted:
-        C.log(f"predicted card in output: {predicted} (target {round(args.target_luminance * 255, 1)})")
+        C.log(f"predicted card in output: {predicted} (target {round(args.target_luminance * 255, 1)}, warmth {session.get('warmth', 0)}; neutral error before warmth {neutral_err}/255)")
     C.log(f"overrides: {len(session['overrides'])}, excluded: {len(session['exclude'])} -> {args.out}")
     return 0
 

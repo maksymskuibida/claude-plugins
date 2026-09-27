@@ -96,9 +96,11 @@ A session, as Claude drives it through the skill (`S` is the skill's `scripts/` 
 
 - **Never generative.** Colour and light are arithmetic on the real pixels; the cutout is a
   segmentation mask; the loop is a cut of the real rotation.
-- **Grey card first**; white balance and exposure are derived, not eyeballed. No card:
-  measure a white plate rim instead (`--auto --white`, `--target-luminance 0.75`), per
-  photo when the sources differ (`--file-measure`).
+- **Grey card first**; white balance and exposure are derived, not eyeballed, then a
+  deliberate, uniform warmth (`warmth`, default 0.04) is kept so plates do not read
+  clinical. No card: measure a white plate rim instead (`--auto --white`,
+  `--target-luminance 0.75`), per photo or per clip when the sources differ
+  (`--file-measure`).
 - **One parameter set per session** in `work/session.json`; differences between dishes are
   per-file overrides in that file.
 - **Claude judges contact sheets and frame grids only**, never single files, and only the
