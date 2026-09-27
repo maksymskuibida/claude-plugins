@@ -107,6 +107,12 @@ def _worker(job):
     return src.name, grade_one(src, dst, p)
 
 
+def geometry_is_identity(p: dict) -> bool:
+    """No crop, straighten or scale: the grade cannot have cut anything, so the vessel check has nothing to say."""
+    return (not p.get("crop_box") and C.parse_ratio(p.get("crop_ratio")) is None
+            and abs(float(p.get("crop_scale") or 1.0) - 1.0) < 1e-6 and not float(p.get("straighten_deg") or 0.0))
+
+
 def vessel_check(files, out_dir: Path) -> list[dict]:
     """subject_cut flags: the plate touches the crop edge where it did not in the source.
 
@@ -161,7 +167,7 @@ def vessel_check(files, out_dir: Path) -> list[dict]:
         by_plate = p_out > 0.05 and p_out > p_src + 0.03
         if by_matte or by_plate:
             t_out, t_src = (m_out, m_src) if by_matte else (p_out, p_src)
-            flags.append({"file": dst.name, "code": "subject_cut", "value": round(t_out, 3),
+            flags.append({"file": dst.name, "code": "subject_cut", "severity": "error", "value": round(t_out, 3),
                           "detail": f"the {'dish' if by_matte else 'plate'} touches the crop edge on {t_out:.0%} of the border (source: {t_src:.0%}): the crop cuts the vessel",
                           "hint": "widen the crop for this file (crop_scale up, crop_ratio none, or a larger crop_box) and re-grade"})
             C.log(f"  {dst.name}: subject_cut ({t_out:.0%} of the border, source {t_src:.0%})")
@@ -237,7 +243,7 @@ def main() -> int:
     if args.qa:
         flags = []
         if not args.no_vessel_check:
-            flags += vessel_check(files, out_dir)
+            flags += vessel_check([src for src in files if not geometry_is_identity(C.params_for(session, src.name))], out_dir)
         for name in sorted(results):
             st = results[name]
             if st["clip_high_pct"] > args.clip_high_warn:

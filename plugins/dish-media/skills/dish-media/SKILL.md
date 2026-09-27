@@ -200,9 +200,12 @@ light) are a different job from a shoot, and the defaults change with them:
 - `--crop-ratio none` unless the batch really shares an orientation: forcing 4:3 onto
   square and portrait snapshots cuts plates. Crop only to remove clutter, with
   `crop_box`, and keep the vessel whole.
-- `grade.py` runs a vessel check when rembg is installed and flags `subject_cut` for a
-  crop that touches the plate where the source did not. A flagged file is not delivered
-  until its crop is widened.
+- `grade.py` runs a vessel check when rembg is installed on every file it cropped,
+  straightened or scaled, and flags `subject_cut` where the plate touches the crop edge
+  and did not in the source. It is an error flag: `deliver.py` refuses the batch until
+  that crop is widened (`crop_scale` up or a larger `crop_box`) and the file re-graded,
+  or the file is excluded. A crop you meant to be tight is still a cut plate on a menu;
+  clutter is removed by cropping up to the vessel's margin, never into it.
 - Before delivering, make one before/after pair sheet of the three most-corrected files
   (largest gains or exposure): `contact_sheet.py --in out/photos/a.jpg out/photos/b.jpg
   out/photos/c.jpg --before work/photos --out qa/pairs.jpg`, and look at it. The
@@ -324,7 +327,11 @@ previous sheet.
 - **Exposure outliers**: a thumbnail clearly lighter or darker than its neighbours, or
   `Y50` more than ~0.06 from the reference's. The report computes this too; the eye
   catches the ones the number misses (dark food on a white plate reads "dark" while the
-  median says "fine").
+  median says "fine"). A dish flagged `exposure_outlier` on the dark side by more than
+  0.2 is dark, not moody: give it `exposure_ev` (+0.3 for −0.2, +0.6 for −0.4) and look
+  again, unless the food itself is dark on a dark plate. A frame left dark because its
+  measured patch was the brightest thing in it is the commonest way a batch stops
+  matching.
 - **Colour cast**: a plate that is warmer, cooler, greener or magenta next to the
   reference's plate. Whole-batch casts mean the card was wrong: re-measure and
   re-calibrate rather than overriding 40 files.
