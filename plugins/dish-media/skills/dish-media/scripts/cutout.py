@@ -178,6 +178,10 @@ def main() -> int:
             flags.append({"file": dst.name, "code": "matte_low_confidence", "value": score,
                           "detail": "; ".join(reasons) or "low score",
                           "hint": "look at it on the cutout contact sheet; re-run with --erode/--feather, or deliver the plain graded photo instead"})
+        if details["border_touch"] > 0.01:
+            flags.append({"file": dst.name, "code": "subject_cut", "value": details["border_touch"],
+                          "detail": f"the dish touches the frame edge on {details['border_touch']:.0%} of the border: the crop cuts the plate or tray",
+                          "hint": "widen the crop for this file (crop_scale up, or a larger crop_box) so the whole vessel sits inside with a margin, then re-grade and re-cut"})
     if args.qa:
         C.update_stats(Path(args.qa) / "cutout_stats.json", stats)
         C.write_flags(args.qa, "cutout", [f.name for f in files], flags)

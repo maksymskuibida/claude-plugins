@@ -61,6 +61,47 @@
         "Seam or loop-quality scores are recorded for at least three clips (video_stats.json or the notes)",
         "No original was modified: every file under the read-only input folder has the same checksum after the run"
       ]
+    },
+    {
+      "id": 4,
+      "name": "pattaya-menu",
+      "prompt": "Our photographer shot 15 dishes for the tablet menu at the restaurant, they're in <inputs>/pattaya-menu/raw/photos. No grey card, same place but not all on the same evening. Make them look consistent for the tablets, keep the whole plate in the frame, and no background removal, we want the table showing. Originals are read-only; build the project in <outputs>/project.",
+      "expected_output": "Per-file white balance and exposure from a plate patch in each photo (no card), one shared look, crops that keep the whole plate with a margin (or a stated reason when the source already cut it), no cutouts, contact-sheet QA, a QA report and a delivery folder with 15 photos, plus reshoot advice for the two plates the photographer cut.",
+      "files": [
+        "results/data/evals/pattaya-menu"
+      ],
+      "expectations": [
+        "Every one of the 15 photos has a graded output JPEG, or is excluded with a stated content reason",
+        "Delivered photos are JPEG with an sRGB profile or no profile, long edge at most 2560 px, orientation baked in",
+        "The plates read neutral after correction: in at least 12 of the delivered photos the bright low-chroma pixels (the plate) are within 6/255 of neutral",
+        "The batch is even: the plate brightness (95th-percentile luminance) of the delivered photos spans at most 0.15",
+        "The vessel is whole: no delivered photo cuts the plate (rembg matte touching the frame edge on more than 1% of the border) unless the source photo already did",
+        "The delivered photos keep their real background: no cutout on a plain colour was delivered",
+        "Contact sheets exist (a QA image at most 1568 px with several thumbnails) and the notes say they were judged as sheets",
+        "A QA report exists that names at least one flagged photo with a reason",
+        "The final answer names the plates the photographer cut (club sandwich, steak with mash) as reshoot candidates or explains the crop choice for them",
+        "No original was modified: every file under the read-only input folder has the same checksum after the run"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "loops-real",
+      "prompt": "Here are the turntable clips for the menu, in <inputs>/loops-real/raw/video, and the session file from the photo grading at <inputs>/loops-real/work/session.json. Some of the dishes only turn part of the way in the clip, one is upright/portrait, and raspberries-hdr.mov looks flat and grey on my laptop. Make them all loop for the tablets with the photo look. Originals are read-only; write to <outputs>/project.",
+      "expected_output": "SDR H.264 loops at 1080p for every dish clip: partial rotations as ping-pong (a revolution cut would jump), full turns as revolutions, the portrait clip kept upright, the HDR clip tone-mapped before grading, the clip with a person excluded with a reason, direction per clip with the one that turns the other way flagged, frame grids and seam scores, QA report.",
+      "files": [
+        "results/data/evals/loops-real"
+      ],
+      "expectations": [
+        "Every clip that shows a dish without a person became an SDR H.264 loop (yuv420p, no audio, long edge at most 1920); cake_with_baker is excluded or flagged with a reason (person in frame)",
+        "Delivered loops are seamless: last-frame to first-frame similarity at least 0.95 for each",
+        "Partial rotations (raspberries, tomato_juice, baked_dish, chocolate_cake) are exported as ping-pong (or a stated dissolve), not cut as a fake revolution",
+        "The HLG clip was tone-mapped before grading: raspberries-hdr's loop is SDR (bt709 or untagged, yuv420p) with mean luminance within 10% of the raspberries loop",
+        "The portrait clip stays upright: the chocolate_cake loop is taller than wide with a long edge at most 1920",
+        "Turning direction is recorded for at least four clips and the clip that turns the other way (cake_stand, counter-clockwise) is flagged direction_mismatch or named in the notes",
+        "Frame grids (at most 1568 px) exist for every delivered loop",
+        "The session look was applied to the clips: relative to the source frame, a loop's B/G rises and R/G falls in the direction of the session gains",
+        "No original was modified: every file under the read-only input folder has the same checksum after the run"
+      ]
     }
   ]
 }

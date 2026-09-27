@@ -13,9 +13,28 @@ Real files the evals run on, fetched by `fetch_data.py` into the git-ignored
 | `video/moon_turntable.webm` | `Moon Essentials- Turntable (SVS5319).webm` (NASA SVS, 1080p transcode) | Public domain |
 | `video/swift_360.webm` | `Swift Spacecraft Animations- 2025 (SVS14786 - SWIFT 360 4k 60fps, cropped).webm` (NASA SVS, 1080p transcode) | Public domain |
 | `video/al92_rotation.webm` | `Exposed Central Rotation of AL92 (CIRA 2024-06-21 - nolabels).webm` (1080p transcode) | Public domain |
+| `pattaya/*.jpg` (15) | `DFC 1093 …`, `DFC 5021 …`, `DFC 1025 …`, `DFC 1238 …`, `DFC 1493 …`, `DFC 5103 …`, `DFC 2288 …`, `DFC 5113 …`, `DFC 1021 …`, `DFC 4533 …`, `DFC 3983 …`, `DZ6 1891 …`, `DSCF0811 …`, `DSCF0812 …`, `DFC 0313 …` (single plated dishes by PattayaPatrol; full titles in `fetch_data.py`) | CC BY-SA 4.0 |
+
+Real rotating-food clips (not on Commons), fetched by hand into `results/data/downloads/video-real/`:
+
+| Local name | Source | Licence |
+|---|---|---|
+| `mixkit_rotating_bowl_fruit.mp4` | Mixkit "Rotating bowl with fruit on a white background" (10424), 720p | Mixkit Stock Video Free License |
+| `mixkit_rotating_chocolate_cake.mp4` | Mixkit "Slowly rotating chocolate cake seen from above" (41124), 720p portrait | Mixkit Stock Video Free License |
+| `pexels_raspberries_black_plate.mp4` | Pexels video 37710291 | Pexels License |
+| `pexels_tomato_juice_plate.mp4` | Pexels video 37710296 | Pexels License |
+| `pexels_baked_dish.mp4` | Pexels video 6162079 | Pexels License |
+| `pexels_spinning_cake_stand.mp4` | Pexels video 8478028 | Pexels License |
+| `pexels_rotating_cake_stand.mp4` | Pexels video 7525335 (a person in frame; the content trap) | Pexels License |
+| `pexels_gourmet_dumplings.mp4`, `pexels_girl_rotating_cake_stand.mp4`, `pexels_manti_dumplings.mp4` | Pexels 37626631, 8899618, 37296046 (fetched, not used) | Pexels License |
+
+Fetch the Mixkit files from `https://assets.mixkit.co/videos/<id>/<id>-720.mp4` and the Pexels files from
+`https://www.pexels.com/download/video/<id>/?w=1920&h=1080` with a browser user agent.
 
 The HK set is one phone, one restaurant, eight minutes: the closest thing on
 Commons to a real session (one dish from eleven angles). The mixed set is
-several photographers and lights on purpose. No food turntable clip exists on
-Commons, so the loops use three turntable-style renders; `build_eval_inputs.py`
-re-encodes them as phone-like H.264 `.mov` files and tags one as HLG.
+several photographers and lights on purpose. The Pattaya set is fifteen
+different plated dishes by one photographer. No food turntable clip exists on
+Commons, so `loops-and-hdr` uses three turntable-style renders and `loops-real`
+the Mixkit and Pexels clips above; `build_eval_inputs.py` re-encodes them as
+phone-like H.264 `.mov` files and tags one of each set as HLG.

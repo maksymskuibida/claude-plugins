@@ -36,6 +36,7 @@ HINTS = {
     "cast_outlier": "per-file override: wb_gains, or reshoot with the card; check the sheet first",
     "card_not_neutral": "the session's own card is off neutral; re-measure the card and re-run calibrate.py",
     "matte_low_confidence": "look at the cutout sheet; try cutout.py --erode 2 --feather 2, or deliver the plain graded photo",
+    "subject_cut": "the crop cuts the plate or tray: widen it for that file (crop_scale, crop_box) so the whole vessel has a margin, re-grade, re-cut",
     "period_ambiguous": "2-fold symmetric dish: check the frame grid, or set --duration to the full turn",
     "period_weak": "the turntable may not have completed a turn in the clip; check the grid or use --loop pingpong",
     "video_failed": "see the detail; the clip was not exported",

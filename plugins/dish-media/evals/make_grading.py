@@ -22,6 +22,10 @@ KEYS = {
                       "cross_session_reported", "delivered_set_even", "contact_sheets", "matte_quality_assessed", "originals_untouched"],
     "loops-and-hdr": ["four_loops_format", "moon_swift_seamless", "hdr_tonemapped", "session_look_applied", "al92_ambiguity_handled",
                       "frame_grids", "seam_scores_recorded", "originals_untouched"],
+    "pattaya-menu": ["all_graded_or_excluded", "delivery_format", "plates_neutral", "batch_even", "vessel_whole", "real_background_kept",
+                     "contact_sheets", "qa_report", "manual:reshoot_advice", "originals_untouched"],
+    "loops-real": ["dish_loops_format_baker_excluded", "loops_seamless", "partial_as_pingpong", "hdr_tonemapped", "portrait_kept",
+                   "direction_recorded_and_odd_one_flagged", "frame_grids", "session_look_applied", "originals_untouched"],
 }
 
 

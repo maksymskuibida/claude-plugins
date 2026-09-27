@@ -324,6 +324,129 @@ def main() -> int:
         res["seam_scores_recorded"] = (n_seam >= 3 or len(re.findall(r"seam[^\n]{0,40}\d\.\d{2}", notes, re.I)) >= 3, f"video_stats seams={n_seam}; notes seam mentions={len(re.findall(r'seam', notes, re.I))}")
         res["originals_untouched"] = (checksums_ok(name), "checksums compared with the pre-run list")
 
+    elif name == "pattaya-menu":
+        stems = [Path(n).stem for n in TRUTH["pattaya-menu"]["photos"]]
+        graded = find_graded(out, stems)
+        sess = next(iter(out.rglob("session.json")), None)
+        excl = set()
+        if sess:
+            try:
+                excl = {C.stem_of(x) for x in (json.loads(sess.read_text()).get("exclude") or [])}
+            except json.JSONDecodeError:
+                pass
+        excluded = [st for st in stems if st not in graded and (st in excl or re.search(st + r".{0,160}(exclud|reshoot|unusable|cut)", notes, re.I | re.S))]
+        res["all_graded_or_excluded"] = (len(graded) + len(excluded) == len(stems), f"graded {len(graded)}/{len(stems)}; excluded with a reason: {excluded}")
+        bad = []
+        for st, pth in graded.items():
+            with Image.open(pth) as im:
+                icc = im.info.get("icc_profile"); ok_icc = True
+                if icc:
+                    from PIL import ImageCms
+                    import io
+                    ok_icc = "srgb" in ImageCms.getProfileDescription(ImageCms.ImageCmsProfile(io.BytesIO(icc))).lower()
+                if im.format != "JPEG" or not ok_icc or max(im.size) > 2560 or im.getexif().get(274, 1) not in (None, 1):
+                    bad.append(pth.name)
+        res["delivery_format"] = (bool(graded) and not bad, "; ".join(bad) or f"{len(graded)} files JPEG/sRGB/<=2560/orientation ok")
+        deliver = next((d for d in (out / "project" / "deliver" / "photos", out / "project" / "delivery") if d.is_dir() and list(d.glob("*.jpg"))), None)
+        delivered = sorted(deliver.glob("*.jpg")) if deliver else [graded[st] for st in sorted(graded)]
+        neut = {pth.stem: round(plate_neutrality(C.load_rgb8(pth)), 1) for pth in delivered}
+        res["plates_neutral"] = (sum(1 for v in neut.values() if v <= 6) >= min(12, len(neut)) and bool(neut), json.dumps(neut))
+        p95 = {pth.stem: C.image_stats(C.load_rgb8(pth))["y_p95"] for pth in delivered}
+        spread = (max(p95.values()) - min(p95.values())) if p95 else 9
+        res["batch_even"] = (bool(p95) and spread <= 0.15, f"plate p95 per photo {json.dumps({k: round(v, 2) for k, v in p95.items()})}; spread {spread:.2f} (limit 0.15)")
+        # the vessel is whole: matte border contact on the delivered file vs on the source
+        import cutout as CO
+        model, _ = CO.load_model(CO.DEFAULT_MODEL)
+        cuts = {}
+        for pth in delivered:
+            src = INPUTS / name / "raw" / "photos" / f"{pth.stem}.jpg"
+            a_out = CO.confidence(CO.matte_for(C.load_rgb8(pth), model))[1]["border_touch"]
+            a_src = CO.confidence(CO.matte_for(C.load_rgb8(src), model))[1]["border_touch"] if src.is_file() else 0.0
+            cuts[pth.stem] = (round(a_out, 3), round(a_src, 3))
+        bad_cut = [k for k, (o, s_) in cuts.items() if o > 0.01 and o > s_ + 0.005]
+        res["vessel_whole"] = (bool(cuts) and not bad_cut, f"border contact out/src per photo {json.dumps(cuts)}; cut worse than source: {bad_cut}")
+        plain = []
+        for pth in delivered:
+            a = C.load_rgb8(pth)
+            corners = np.stack([a[:12, :12], a[:12, -12:], a[-12:, :12], a[-12:, -12:]]).reshape(4, -1, 3).mean(axis=1)
+            if np.abs(corners - corners.mean(axis=0)).max() <= 4 and a.reshape(-1, 3).std(axis=0).mean() < 60:
+                plain.append(pth.name)
+        res["real_background_kept"] = (bool(delivered) and not plain, f"plain-background deliveries: {plain}")
+        sheets = [q for q in jpgs(out) if "sheet" in q.parent.name or "sheet" in q.name.lower() or "survey" in q.name.lower()]
+        sizes = {}
+        for q in sheets:
+            with Image.open(q) as im:
+                sizes[q.name] = im.size
+        res["contact_sheets"] = (bool(sizes) and all(max(v) <= 1568 for v in sizes.values()) and bool(re.search(r"sheet", notes, re.I)), json.dumps(sizes))
+        rep = list(out.rglob("report.md"))
+        txt = rep[0].read_text() if rep else ""
+        res["qa_report"] = (bool(rep) and bool(re.search(r"`\w+`", txt)), rep[0].relative_to(out).as_posix() if rep else "no report.md")
+        res["originals_untouched"] = (checksums_ok(name), "checksums compared with the pre-run list")
+
+    elif name == "loops-real":
+        T = TRUTH["loops-real"]
+        dish_clips = [Path(c).stem for c in T["clips"] if c not in T["not_a_dish"]]
+        loops = {}
+        for st in dish_clips + ["cake_with_baker"]:
+            loops[st] = next((q for q in mp4s(out) if q.stem == st), None)
+        info = {k: probe(v) for k, v in loops.items() if v}
+        fmt_ok = all(loops.get(st) for st in dish_clips) and all(i["video"].get("codec_name") == "h264" and i["video"].get("pix_fmt") == "yuv420p" and i["audio"] == 0
+                                                                 and max(int(i["video"].get("width", 0)), int(i["video"].get("height", 0))) <= 1920 for i in info.values())
+        baker_ok = (loops.get("cake_with_baker") is None) or bool(re.search(r"cake_with_baker.{0,300}(person|woman|baker|people|exclud|not a dish|flag)", notes, re.I | re.S))
+        res["dish_loops_format_baker_excluded"] = (fmt_ok and baker_ok, json.dumps({k: (v["video"].get("width"), v["video"].get("height"), v["video"].get("pix_fmt"), v["audio"], round(v["duration"], 2)) for k, v in info.items()}) + f"; baker handled={baker_ok}")
+        seams = {k: seam(v) for k, v in loops.items() if v and k in dish_clips}
+        res["loops_seamless"] = (bool(seams) and all(s_ >= 0.95 for s_, _ in seams.values()), json.dumps({k: (round(s_, 4), n) for k, (s_, n) in seams.items()}))
+        vs = next(iter(out.rglob("video_stats.json")), None)
+        vstats = json.loads(vs.read_text()) if vs else {}
+        partial_ok = []
+        for st in [Path(c).stem for c in T["partial_rotation"]]:
+            mode = (vstats.get(st) or {}).get("loop")
+            ok_ = mode == "pingpong" or bool(re.search(st + r".{0,300}(ping|dissolve|crossfade)", notes, re.I | re.S))
+            partial_ok.append((st, mode, ok_))
+        res["partial_as_pingpong"] = (all(o for _, _, o in partial_ok), json.dumps(partial_ok))
+        import cv2
+
+        def mid_frame(pth: Path):
+            w, h, fps, n = FG.probe(str(pth)); fr = None
+            for i, fr in enumerate(FG.stream_frames(str(pth), w, h)):
+                if i == n // 2:
+                    return fr
+            return fr
+        hdr_ok, note = False, "missing loops"
+        if loops.get("raspberries") and loops.get("raspberries-hdr"):
+            ya = (mid_frame(loops["raspberries"]).astype(np.float32) @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)).mean()
+            yb = (mid_frame(loops["raspberries-hdr"]).astype(np.float32) @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)).mean()
+            trc = info["raspberries-hdr"]["video"].get("color_transfer", "")
+            hdr_ok = abs(yb - ya) <= 0.10 * max(ya, 1) and trc in ("bt709", "", "unknown", "iec61966-2-1") and info["raspberries-hdr"]["video"].get("pix_fmt") == "yuv420p"
+            note = f"mean Y raspberries {ya:.1f} vs hdr {yb:.1f}; transfer={trc}"
+        res["hdr_tonemapped"] = (hdr_ok, note)
+        cc = info.get("chocolate_cake", {}).get("video", {})
+        res["portrait_kept"] = (bool(cc) and int(cc.get("height", 0)) > int(cc.get("width", 0)) and int(cc.get("height", 0)) <= 1920, f"chocolate_cake {cc.get('width')}x{cc.get('height')}")
+        dirs = {k: v.get("direction") for k, v in vstats.items() if isinstance(v, dict) and v.get("direction") in ("cw", "ccw")}
+        flags_json = next(iter(out.rglob("flags.json")), None)
+        fl = json.loads(flags_json.read_text()).get("flags", []) if flags_json else []
+        mismatch = any(f.get("code") == "direction_mismatch" for f in fl) or bool(re.search(r"cake_stand.{0,300}(other way|opposite|counter|ccw|mismatch|reverse)", notes, re.I | re.S))
+        res["direction_recorded_and_odd_one_flagged"] = (len(dirs) >= 4 and mismatch, f"directions {json.dumps(dirs)}; odd one flagged={mismatch}")
+        grids = [q for q in jpgs(out) if "grid" in q.parent.name or "grid" in q.name.lower()]
+        sizes = {}
+        for q in grids:
+            with Image.open(q) as im:
+                sizes[q.name] = im.size
+        n_deliv = sum(1 for st in dish_clips if loops.get(st))
+        res["frame_grids"] = (len(sizes) >= n_deliv and n_deliv > 0 and all(max(v) <= 1568 for v in sizes.values()), json.dumps(sizes))
+        look_ok, note = False, "missing"
+        if loops.get("tomato_juice"):
+            srcf = mid_frame(INPUTS / name / "raw" / "video" / "tomato_juice.mov").astype(np.float32).reshape(-1, 3)
+            dstf = mid_frame(loops["tomato_juice"]).astype(np.float32).reshape(-1, 3)
+            def ratios(v):
+                lin = C.srgb_to_linear(v / 255.0); m = lin.mean(axis=0)
+                return m[0] / max(m[1], 1e-4), m[2] / max(m[1], 1e-4)
+            rs, bs = ratios(srcf); rd, bd = ratios(dstf)
+            look_ok = rd < rs - 0.02 and bd > bs + 0.02
+            note = f"source R/G {rs:.3f} B/G {bs:.3f} -> loop R/G {rd:.3f} B/G {bd:.3f}"
+        res["session_look_applied"] = (look_ok, note)
+        res["originals_untouched"] = (checksums_ok(name), "checksums compared with the pre-run list")
+
     print(json.dumps({k: {"passed": bool(v[0]), "evidence": v[1]} for k, v in res.items()}, indent=2))
     return 0
 

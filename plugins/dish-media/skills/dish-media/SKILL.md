@@ -228,7 +228,8 @@ without changing the batch's aspect ratio. `crop_scale` and `crop_center` keep t
 session's ratio, so they cannot isolate a wide subject sitting next to another dish; for
 that one frame use `crop_box=0.05,0.40,0.60,0.35` (x, y, width, height as fractions of
 the frame), which takes exactly that window with its own aspect — one odd ratio in the
-batch is better than a plate that is not the dish. Files
+batch is better than a plate that is not the dish. Size the box from the vessel, not the
+food: the whole plate or tray plus a margin, never a window that clips its ends. Files
 with more than 1% of pixels at 254+ are flagged `clip_high`; `qa/grade_stats.json`
 holds every file's median luminance and clipping for the sheets and the report.
 
@@ -297,6 +298,12 @@ previous sheet.
   nothing should. Name the file for a reshoot.
 - **Straightness and framing**: a tilted plate rim gets `straighten_deg`; a dish sitting
   off-centre gets `crop_center=[0.55,0.5]`.
+- **The vessel is whole.** A crop that clips the plate, tray or bowl reads as a mistake
+  on a menu even when the food is all there. Every delivered frame keeps the whole vessel
+  with a margin of about a tenth of its width on all sides; when a `crop_box` or a tight
+  `crop_scale` cannot manage that without pulling in a neighbour's plate, keep the
+  neighbour's edge and say so, or ask for a reshoot. `cutout.py` flags `subject_cut`
+  when the matte touches the frame edge.
 - **Is it the dish?** The first question on every sheet and grid, before exposure or
   colour: an interior, a table with four plates, a hand, a clip of something that is not
   on the menu. Nothing downstream fixes content. Put the file on the session's

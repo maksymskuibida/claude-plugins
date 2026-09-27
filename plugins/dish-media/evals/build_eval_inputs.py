@@ -83,6 +83,7 @@ def main() -> int:
     if out.exists():
         shutil.rmtree(out)
     truth = {}
+    (out / ".inputs.md5").parent.mkdir(parents=True, exist_ok=True)
 
     # --- session-with-card ------------------------------------------------
     s1 = out / "session-with-card"
@@ -137,6 +138,43 @@ def main() -> int:
     truth["loops-and-hdr"] = {"clips": {"moon.mov": 12.0, "swift.mov": 10.0, "al92.mov": None, "moon-hdr.mov": 12.0},
                               "session": json.loads((s3 / "work" / "session.json").read_text())}
     truth["session-with-card"]["card_box_work2400"] = card
+
+    # --- pattaya-menu: 15 single plated dishes, one photographer, no card --------
+    s4 = out / "pattaya-menu"
+    (s4 / "raw" / "photos").mkdir(parents=True)
+    names = []
+    for src in sorted((dl / "pattaya").glob("*.jpg")):
+        shutil.copyfile(src, s4 / "raw" / "photos" / src.name)
+        names.append(src.name)
+    truth["pattaya-menu"] = {"photos": names, "source_plate_cut": ["club_sandwich.jpg", "steak_mash.jpg"]}
+
+    # --- loops-real: real rotating food clips re-encoded like phone clips ---------
+    s5 = out / "loops-real"
+    (s5 / "raw" / "photos").mkdir(parents=True)
+    (s5 / "raw" / "video").mkdir(parents=True)
+    (s5 / "work").mkdir(parents=True)
+    real = dl / "video-real"
+    def real_clip(src: Path, dst: Path, hdr: bool = False):
+        tags = ("setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc:range=tv" if hdr
+                else "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv")
+        enc = ["-c:v", "libx264", "-preset", "fast", "-crf", "18", "-movflags", "+faststart"]
+        enc += ["-pix_fmt", "yuv420p10le"] if hdr else ["-pix_fmt", "yuv420p"]
+        ffmpeg("-i", str(src), "-an", "-vf", f"fps=30,{tags}", *enc, str(dst))
+    clips = {
+        "raspberries.mov": ("pexels_raspberries_black_plate.mp4", False),
+        "tomato_juice.mov": ("pexels_tomato_juice_plate.mp4", False),
+        "baked_dish.mov": ("pexels_baked_dish.mp4", False),
+        "fruit_bowl.mov": ("mixkit_rotating_bowl_fruit.mp4", False),
+        "chocolate_cake.mov": ("mixkit_rotating_chocolate_cake.mp4", False),
+        "cake_stand.mov": ("pexels_spinning_cake_stand.mp4", False),
+        "cake_with_baker.mov": ("pexels_rotating_cake_stand.mp4", False),
+        "raspberries-hdr.mov": ("pexels_raspberries_black_plate.mp4", True),
+    }
+    for dst, (src, hdr) in clips.items():
+        real_clip(real / src, s5 / "raw" / "video" / dst, hdr=hdr)
+    shutil.copyfile(s3 / "work" / "session.json", s5 / "work" / "session.json")
+    truth["loops-real"] = {"clips": list(clips), "not_a_dish": ["cake_with_baker.mov"], "portrait": ["chocolate_cake.mov"],
+                           "hdr": ["raspberries-hdr.mov"], "partial_rotation": ["raspberries.mov", "tomato_juice.mov", "baked_dish.mov", "chocolate_cake.mov"]}
     (out / "truth.json").write_text(json.dumps(truth, indent=2) + "\n")
     for root, _, files in sorted(__import__("os").walk(out)):
         for f in sorted(files):
