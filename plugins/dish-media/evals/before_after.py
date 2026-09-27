@@ -84,7 +84,7 @@ def main() -> int:
     out_dir = Path(args.run_outputs)
     proj = out_dir / "project"
     rows = []
-    if args.eval_name in ("session-with-card", "no-card-mixed"):
+    if (INPUTS / args.eval_name / "raw" / "photos").is_dir() and any((INPUTS / args.eval_name / "raw" / "photos").iterdir()):
         raw_dir = INPUTS / args.eval_name / "raw" / "photos"
         deliver = proj / "deliver" / "photos"
         graded_dir = proj / "out" / "photos"
