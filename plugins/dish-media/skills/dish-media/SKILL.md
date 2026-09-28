@@ -337,7 +337,12 @@ previous sheet.
   re-calibrate rather than overriding 40 files.
 - **Blown highlights on white plates**: `clip` above 1% or a plate rim that has lost its
   edge. Fix with `exposure_ev=-0.2` on that file, or raise `highlights` for the session
-  if it is most of them.
+  if it is most of them. Know what that buys: a pixel the phone already saved as pure
+  white has no detail left, so it comes down to a flat light grey and stays flat; the
+  look keeps pixels blown in two or three channels neutral (they take only the session
+  warmth) instead of letting the white balance tint them pink, green or yellow, and
+  leaves a colour clipped in one channel (a red tomato) alone. Nothing is painted in. If the blown part is the food
+  itself, that is a reshoot, not an override.
 - **Crushed shadows**: dark sauces or bowls with no texture at all. `shadows=0.2` or
   `exposure_ev=+0.2` on that file.
 - **Failed mattes** (cutout sheets): a bite out of the plate rim, a halo of table around

@@ -182,10 +182,27 @@ def warmth_gains(warmth: float) -> np.ndarray:
     return g / np.float32(g @ LUMA_709)
 
 
+BLOWN_LO, BLOWN_HI = 0.955, 0.985   # linear; sRGB 250 and 253.5 of 255
+
+
 def apply_look_linear(lin: np.ndarray, look: dict) -> np.ndarray:
-    """WB gains, warmth, exposure, tone (ratio-preserving on luminance), saturation."""
-    gains = np.asarray(look["wb_gains"], dtype=np.float32) * warmth_gains(look.get("warmth", 0.0))
-    lin = lin * gains * np.float32(look["exposure"])
+    """WB gains, warmth, exposure, tone (ratio-preserving on luminance), saturation.
+
+    A pixel blown in two or three channels carries no usable colour: the sensor
+    saturated, the clipped channels are underestimated, and white-balancing such a pixel
+    paints the balance's cast onto it (a pink wall that was clipped in blue, a green
+    window, a yellow plate rim). Those pixels are made neutral after the balance and then
+    take the look's warmth like any other white. A pixel clipped in one channel only (red
+    on a tomato or kimchi) keeps its colour. Nothing is painted in; blown areas come down
+    with the exposure and stay flat."""
+    wb = np.asarray(look["wb_gains"], dtype=np.float32)
+    second = np.sort(lin, axis=-1)[..., 1]                     # the second-brightest source channel
+    w = np.clip((second - BLOWN_LO) / (BLOWN_HI - BLOWN_LO), 0.0, 1.0)
+    lin = lin * wb
+    w = (w * w * (3.0 - 2.0 * w))[..., None]
+    if bool(np.any(w > 0)):
+        lin = lin * (1.0 - w) + luminance(lin)[..., None] * w
+    lin = lin * warmth_gains(look.get("warmth", 0.0)) * np.float32(look["exposure"])
     y = luminance(lin)
     y_c = np.clip(y, 1e-6, 1.0)
     y_out = srgb_to_linear(tone_curve(linear_to_srgb(y_c), look))

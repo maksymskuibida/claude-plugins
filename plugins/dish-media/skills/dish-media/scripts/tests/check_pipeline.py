@@ -114,6 +114,14 @@ def main() -> int:
     stats = json.loads((P / "qa" / "grade_stats.json").read_text())
     check(stats["dish-004"]["y_median"] > stats["dish-001"]["y_median"] + 0.05, "the +0.5 EV outlier dish is measurably brighter")
     check(any(f["code"] == "clip_high" and f["file"] == "dish-004.jpg" for f in flags), "the outlier dish was flagged clip_high by grade.py")
+    # a pixel blown in every channel stays neutral (plus warmth) under a strong balance; a bright grey still takes the balance
+    look = dict(session, wb_gains=[0.80, 1.0, 1.30], exposure=0.8, warmth=0.04)
+    px = C.apply_look_rgb8(np.array([[[255, 255, 255], [200, 200, 200]]], dtype=np.uint8), look)[0].astype(int)
+    check(2 <= px[0][0] - px[0][2] <= 12 and abs(px[0][1] - px[0][0]) <= 6, f"a blown white takes no colour from the balance, only the warmth ({px[0].tolist()})")
+    check(px[1][2] - px[1][0] > 25, f"a bright grey that is not blown still takes the balance ({px[1].tolist()})")
+    px2 = C.apply_look_rgb8(np.array([[[255, 90, 80], [240, 255, 255]]], dtype=np.uint8), look)[0].astype(int)
+    check(px2[0][0] - px2[0][1] > 80, f"red clipped in one channel keeps its red ({px2[0].tolist()})")
+    check(abs(px2[1][0] - px2[1][2]) <= 12 and abs(px2[1][1] - px2[1][0]) <= 8, f"a wall clipped in green and blue does not turn pink or cyan ({px2[1].tolist()})")
     ov = P / "out" / "photos-override" / "dish-004.jpg"
     if ov.is_file():
         mean = card_in_output(ov, truth)
