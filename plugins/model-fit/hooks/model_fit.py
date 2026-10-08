@@ -50,10 +50,11 @@ inside a task you already checked.
 subtly wrong produces confident work that has to be redone).
 - Too easy for your model → suggest moving DOWN (a strong model grinding through mechanical work \
 wastes the user's limit).
-- It fits → say nothing about it and get on with the work. Never announce a passing check.
+- It fits → send exactly one line, `## Confirmed model `<model>` fits the task`, then get on with \
+the work in the same turn. Nothing else about the check.
 
 When it does not fit, STOP before starting and send this as a plain chat message — NOT through \
-AskUserQuestion, and with no report sections or other formatting. This overrides any other rule \
+AskUserQuestion, and with no report sections or other formatting (the one-line "fits" message above is the same: plain, no report sections). This overrides any other rule \
 about how to ask, including "decisions go through AskUserQuestion". Reword it to fit; keep it short:
 
     ## Switch to <model>?
@@ -76,8 +77,9 @@ declined for the same kind of work.
 REMINDER = (
     "model-fit: if this message starts a coding task or a big non-coding task, first check the "
     "model you are on fits it (too hard → suggest up, too easy → suggest down); if it does not, "
-    "send the plain-chat `## Switch to <model>?` message per the session-start rule. "
-    "Otherwise ignore this."
+    "send the plain-chat `## Switch to <model>?` message per the session-start rule; if it fits, "
+    "send the one-line `## Confirmed model `<model>` fits the task` and proceed. "
+    "If this is not such a task, ignore this."
 )
 
 ANSWERED = """\
@@ -86,7 +88,7 @@ ANSWERED = """\
 The user's message answers your model suggestion. The model you are running on now (your system \
 prompt names it) is the one they chose — it stands for this task. Do not ask again for it. If it \
 differs from what you suggested, that is their call; do not re-argue it. Begin the work, opening \
-with one short line such as "Confirmed on <model>."
+with the one line `## Confirmed model `<model>` for this task`.
 """
 
 

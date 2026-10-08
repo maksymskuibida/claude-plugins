@@ -69,16 +69,24 @@ class HookTest(unittest.TestCase):
         self.assertIn("suggest moving UP", ctx)
         self.assertIn("suggest moving DOWN", ctx)
 
+    def test_rule_asks_for_the_one_line_when_it_fits(self):
+        ctx = self.start()
+        self.assertIn("## Confirmed model `<model>` fits the task", ctx)
+        self.assertIn("exactly one line", ctx)
+
     def test_every_ordinary_prompt_gets_the_short_reminder(self):
         self.write_transcript([assistant("Here is the result.")])
         ctx = self.prompt()
         self.assertIn("model-fit:", ctx)
-        self.assertLess(len(ctx), 400)
+        self.assertIn("fits the task", ctx)
+        self.assertLess(len(ctx), 600)
         self.assertNotIn("counts as confirmed", ctx)
 
     def test_answer_to_suggestion_is_recognised_for_that_task_only(self):
         self.write_transcript([assistant("thinking aloud"), assistant(SUGGESTION)])
-        self.assertIn("stands for this task", self.prompt())
+        answered = self.prompt()
+        self.assertIn("stands for this task", answered)
+        self.assertIn("## Confirmed model `<model>` for this task", answered)
         # next turn the model's own reply is last: a new task gets the ordinary reminder again
         self.write_transcript([assistant(SUGGESTION), assistant("Confirmed on opus. Starting.")])
         ctx = self.prompt()

@@ -6,7 +6,7 @@ session runs on fits the job — in both directions:
 - **too complicated** for the current model → suggests moving **up**;
 - **too easy** → suggests moving **down** (a strong model grinding through mechanical work wastes
   your limit);
-- **fits** → says nothing and gets on with it.
+- **fits** → one line, `## Confirmed model `<model>` fits the task`, and gets on with it.
 
 Conversation, quick questions and follow-ups inside a task it already checked are skipped. When
 it does not fit, Claude stops and sends a short chat message instead of starting:
@@ -56,7 +56,7 @@ model from its system prompt. The hooks never block a prompt and never fail a se
 - **Claude does the judging.** A hook cannot tell how big or hard a task is; it only supplies the
   rule and the per-prompt nudge, so a missed or needless suggestion is a judgment call, not a bug
   in the hook.
-- **The reminder costs a little.** About 50 tokens added to every prompt; that is the price of
+- **The reminder costs a little.** About 70 tokens added to every prompt, plus the one-line message per task; that is the price of
   the check happening before every task rather than only early in a session.
 - **`continue` on Tab is best effort.** The message is written to end on the `continue`
   instruction so the client's suggested reply can pick it up; no hook can set that suggestion.
