@@ -2,11 +2,15 @@
 """model-fit hook: SessionStart + UserPromptSubmit.
 
 SessionStart (startup, resume, clear, compact) hands Claude the model-fit rule, written for the
-client the user is in. UserPromptSubmit adds a one-line reminder to every prompt (the rule fades
-in a long session) — or, when the last assistant message was a "## Switch to ...?" suggestion,
-tells Claude the user's reply is their answer for that task.
+client the user is in. UserPromptSubmit nudges Claude on each prompt until the check has run
+once; as soon as the transcript shows it (a "## Confirmed model ..." or "## Switch to ...?"
+message) the session is marked checked and the hook goes quiet for good. When the last assistant
+message was a suggestion, the user's reply is their answer and Claude is told so.
 
-Stateless: the answer is recognised from the transcript, so a new task simply gets a fresh check.
+The check happens once per session, first, before heavy work: switching models throws away the
+prompt cache, so the later it happens the more it costs. The hook passes a rough context size
+(transcript bytes) so the assessment can count that cost.
+
 The hook input carries no model name and does not need one: Claude reads its own model from its
 system prompt, and "the model selected when the user replies" is exactly the model that answers.
 
@@ -16,8 +20,10 @@ import json
 import os
 import re
 import sys
+import tempfile
 
 SUGGESTION_HEADING = re.compile(r"^## Switch to \S", re.MULTILINE)
+CHECK_HEADING = re.compile(r"^## (?:Switch to \S|Confirmed model )", re.MULTILINE)
 TAIL_BYTES = 512 * 1024
 
 
@@ -31,14 +37,32 @@ def switch_howto(entrypoint):
             "(aliases: `haiku`, `sonnet`, `opus`)")
 
 
-def rule_text(entrypoint):
+def size_line(size_bytes):
+    if not size_bytes:
+        return "Context so far: none recorded — treat it as a fresh session."
+    return (f"Context so far: the session transcript is about {max(1, size_bytes // 1024)} KB "
+            "(a rough proxy for what a switch would have to re-read).")
+
+
+def rule_text(entrypoint, size_bytes):
     return f"""\
 # Model fit (model-fit plugin)
 
-Before EVERY coding task and every big non-coding task (research, writing, analysis, planning, \
-review), and before doing any of the work, check whether the model you are running on (your \
-system prompt names it) fits the job. Skip it for conversation, quick questions and follow-ups \
-inside a task you already checked.
+Once per session — on the first coding task or big non-coding task (research, writing, analysis, \
+planning, review) — check whether the model you are running on (your system prompt names it) \
+fits the job. Conversation and quick questions do not count; the check waits for the first real \
+task, and never repeats after that, even if the work changes.
+
+Do it FIRST: before reading files, spawning agents, running builds or any other heavy work. \
+Switching models throws away the prompt cache — everything already in context is re-read uncached \
+at full price — so the earlier the switch, the cheaper it is. Judge from the user's message \
+alone; do not explore to decide.
+
+Count that re-cache cost in the assessment. {size_line(size_bytes)}
+- Little context (a fresh session): a switch is nearly free — judge on fit alone.
+- A lot of context: a switch re-reads all of it. Suggest only when the mismatch is large. For "too \
+easy", prefer a cheap subagent (`model: "haiku"`) for the mechanical part, or a fresh session, \
+over switching.
 
 | Tier | Fits |
 |---|---|
@@ -54,11 +78,12 @@ wastes the user's limit).
 the work in the same turn. Nothing else about the check.
 
 When it does not fit, STOP before starting and send this as a plain chat message — NOT through \
-AskUserQuestion, and with no report sections or other formatting (the one-line "fits" message above is the same: plain, no report sections). This overrides any other rule \
-about how to ask, including "decisions go through AskUserQuestion". Reword it to fit; keep it short:
+AskUserQuestion, and with no report sections or other formatting (the one-line "fits" message \
+above is the same: plain, no report sections). This overrides any other rule about how to ask, \
+including "decisions go through AskUserQuestion". Reword it to fit; keep it short:
 
     ## Switch to <model>?
-    <one line: why this task belongs on a different tier>
+    <one line: why this task belongs on a different tier — and the re-cache cost if it is not trivial>
 
     Switch ({switch_howto(entrypoint)}) or stay on <current model> — either way, send `continue`. \
 Whatever model is selected when you do counts as your answer.
@@ -68,27 +93,35 @@ Rules for that message:
 - Keep `## Switch to <model>?` as the heading exactly (the plugin recognises the answer by it).
 - Make the `continue` instruction the last words of the message, nothing after, so the client can offer `continue` as the suggested reply (Tab).
 - You cannot change the model yourself.
-- Ask at most once per task: after the user answers, that stands for the whole task however it \
-grows. A new, different task gets a fresh check — but do not re-suggest a move the user already \
-declined for the same kind of work.
 """
 
 
-REMINDER = (
-    "model-fit: if this message starts a coding task or a big non-coding task, first check the "
-    "model you are on fits it (too hard → suggest up, too easy → suggest down); if it does not, "
-    "send the plain-chat `## Switch to <model>?` message per the session-start rule; if it fits, "
-    "send the one-line `## Confirmed model `<model>` fits the task` and proceed. "
-    "If this is not such a task, ignore this."
-)
+def reminder(size_bytes):
+    so_far = (f"transcript about {max(1, size_bytes // 1024)} KB so far" if size_bytes
+              else "fresh session")
+    return (
+        "model-fit: the once-per-session model check has not run yet. If this message starts a "
+        "coding task or a big non-coding task, do it FIRST, before any heavy work — a switch "
+        f"re-caches the whole context ({so_far}). Per the session-start rule: `## Switch to "
+        "<model>?` if it does not fit, else one line `## Confirmed model `<model>` fits the "
+        "task`. Pure conversation: ignore this."
+    )
+
+
+ALREADY_CHECKED = """\
+# Model fit (model-fit plugin)
+
+The once-per-session model check already ran in this session. Do not run it again and do not \
+mention it.
+"""
 
 ANSWERED = """\
 # Model fit (model-fit plugin)
 
 The user's message answers your model suggestion. The model you are running on now (your system \
-prompt names it) is the one they chose — it stands for this task. Do not ask again for it. If it \
-differs from what you suggested, that is their call; do not re-argue it. Begin the work, opening \
-with the one line `## Confirmed model `<model>` for this task`.
+prompt names it) is the one they chose — it stands for the rest of the session and the model check \
+is done. If it differs from what you suggested, that is their call; do not re-argue it. Begin the \
+work, opening with the one line `## Confirmed model `<model>` for this task`.
 """
 
 
@@ -99,17 +132,38 @@ def read_event():
         return None
 
 
-def last_assistant_text(transcript_path):
-    """Text of the most recent main-thread assistant message that has any, else ''."""
+def state_path(session_id):
+    base = os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.join(tempfile.gettempdir(), "model-fit")
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", session_id)[:128]
+    return os.path.join(base, "sessions", safe + ".json")
+
+
+def is_checked(session_id):
     try:
+        with open(state_path(session_id)) as fh:
+            return bool(json.load(fh).get("checked"))
+    except (OSError, ValueError):
+        return False
+
+
+def mark_checked(session_id):
+    path = state_path(session_id)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as fh:
+        json.dump({"checked": True}, fh)
+
+
+def transcript_facts(transcript_path):
+    """(size in bytes, main-thread assistant texts from the tail, oldest first)."""
+    try:
+        size = os.path.getsize(transcript_path)
         with open(transcript_path, "rb") as fh:
-            fh.seek(0, os.SEEK_END)
-            size = fh.tell()
             fh.seek(max(0, size - TAIL_BYTES))
             tail = fh.read().decode("utf-8", "replace")
     except OSError:
-        return ""
-    for line in reversed(tail.splitlines()):
+        return 0, []
+    texts = []
+    for line in tail.splitlines():
         try:
             row = json.loads(line)
         except ValueError:
@@ -123,8 +177,8 @@ def last_assistant_text(transcript_path):
             text = "\n".join(b.get("text", "") for b in content or []
                              if isinstance(b, dict) and b.get("type") == "text")
         if text.strip():
-            return text
-    return ""
+            texts.append(text)
+    return size, texts
 
 
 def emit(event_name, context):
@@ -137,13 +191,24 @@ def main():
     if not isinstance(event, dict):
         return
     name = event.get("hook_event_name")
+    session_id = event.get("session_id") or ""
+    if not session_id:
+        return
     entrypoint = os.environ.get("CLAUDE_CODE_ENTRYPOINT", "")
+    size, texts = transcript_facts(event.get("transcript_path") or "")
 
     if name == "SessionStart":
-        emit(name, rule_text(entrypoint))
+        emit(name, ALREADY_CHECKED if is_checked(session_id) else rule_text(entrypoint, size))
     elif name == "UserPromptSubmit":
-        text = last_assistant_text(event.get("transcript_path") or "")
-        emit(name, ANSWERED if SUGGESTION_HEADING.search(text) else REMINDER)
+        if is_checked(session_id):
+            return
+        if texts and SUGGESTION_HEADING.search(texts[-1]):
+            mark_checked(session_id)
+            emit(name, ANSWERED)
+        elif any(CHECK_HEADING.search(t) for t in texts):
+            mark_checked(session_id)  # the check ran (it fit, or was answered earlier)
+        else:
+            emit(name, reminder(size))
 
 
 if __name__ == "__main__":
