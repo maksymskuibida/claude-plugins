@@ -62,42 +62,52 @@ class HookTest(unittest.TestCase):
         self.assertIn("## Switch to <model>?", ctx)
         self.assertIn("send `continue`", ctx)
 
-    def test_plain_prompt_is_silent(self):
-        self.write_transcript([assistant("Here is the result.")])
-        self.assertIsNone(self.prompt())
+    def test_rule_checks_every_task_and_both_directions(self):
+        ctx = self.start()
+        self.assertIn("EVERY coding task", ctx)
+        self.assertIn("big non-coding task", ctx)
+        self.assertIn("suggest moving UP", ctx)
+        self.assertIn("suggest moving DOWN", ctx)
 
-    def test_answer_to_suggestion_confirms_once_and_survives_compaction(self):
+    def test_every_ordinary_prompt_gets_the_short_reminder(self):
+        self.write_transcript([assistant("Here is the result.")])
+        ctx = self.prompt()
+        self.assertIn("model-fit:", ctx)
+        self.assertLess(len(ctx), 400)
+        self.assertNotIn("counts as confirmed", ctx)
+
+    def test_answer_to_suggestion_is_recognised_for_that_task_only(self):
         self.write_transcript([assistant("thinking aloud"), assistant(SUGGESTION)])
-        self.assertIn("counts as confirmed", self.prompt())
+        self.assertIn("stands for this task", self.prompt())
+        # next turn the model's own reply is last: a new task gets the ordinary reminder again
         self.write_transcript([assistant(SUGGESTION), assistant("Confirmed on opus. Starting.")])
-        self.assertIsNone(self.prompt())  # confirmed state, not re-announced
+        ctx = self.prompt()
+        self.assertIn("model-fit:", ctx)
+        self.assertNotIn("stands for this task", ctx)
+
+    def test_compaction_reinjects_the_full_rule(self):
         ctx = self.run_hook({"hook_event_name": "SessionStart", "source": "compact"})
-        self.assertIn("already answered", ctx)
-        self.assertNotIn("## Switch to <model>?", ctx)
+        self.assertIn("## Switch to <model>?", ctx)
 
     def test_suggestion_followed_by_other_text_is_not_an_open_question(self):
         self.write_transcript([assistant(SUGGESTION), assistant("Done, all good.")])
-        self.assertIsNone(self.prompt())
+        self.assertNotIn("stands for this task", self.prompt())
 
     def test_suggestion_in_tool_turn_before_pure_tool_use_still_counts(self):
         tool_only = {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Bash"}]}}
         self.write_transcript([assistant(SUGGESTION), tool_only])
-        self.assertIsNotNone(self.prompt())
+        self.assertIn("stands for this task", self.prompt())
 
     def test_sidechain_suggestion_is_ignored(self):
         self.write_transcript([assistant("main text"), assistant(SUGGESTION, isSidechain=True)])
-        self.assertIsNone(self.prompt())
-
-    def test_sessions_are_independent(self):
-        self.write_transcript([assistant(SUGGESTION)])
-        self.assertIsNotNone(self.prompt())
-        ctx = self.run_hook({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s2"})
-        self.assertIn("## Switch to <model>?", ctx)
+        self.assertNotIn("stands for this task", self.prompt())
 
     def test_bad_input_never_fails(self):
-        for raw in ("", "not json", "[]", json.dumps({"hook_event_name": "SessionStart"})):
+        for raw in ("", "not json", "[]", "{}"):
             self.assertIsNone(self.run_hook({}, raw=raw))
-        self.assertIsNone(self.run_hook({"hook_event_name": "UserPromptSubmit", "transcript_path": "/nonexistent"}))
+        # unreadable transcript: still the plain reminder, never a crash
+        ctx = self.run_hook({"hook_event_name": "UserPromptSubmit", "transcript_path": "/nonexistent"})
+        self.assertIn("model-fit:", ctx)
 
 
 if __name__ == "__main__":

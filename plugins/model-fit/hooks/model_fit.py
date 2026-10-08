@@ -2,10 +2,11 @@
 """model-fit hook: SessionStart + UserPromptSubmit.
 
 SessionStart (startup, resume, clear, compact) hands Claude the model-fit rule, written for the
-client the user is in. UserPromptSubmit watches for the user answering a suggestion: when the
-last assistant message was a "## Switch to ...?" suggestion, the user's reply counts as their
-answer, the session is marked confirmed, and Claude is told not to ask again.
+client the user is in. UserPromptSubmit adds a one-line reminder to every prompt (the rule fades
+in a long session) — or, when the last assistant message was a "## Switch to ...?" suggestion,
+tells Claude the user's reply is their answer for that task.
 
+Stateless: the answer is recognised from the transcript, so a new task simply gets a fresh check.
 The hook input carries no model name and does not need one: Claude reads its own model from its
 system prompt, and "the model selected when the user replies" is exactly the model that answers.
 
@@ -15,7 +16,6 @@ import json
 import os
 import re
 import sys
-import tempfile
 
 SUGGESTION_HEADING = re.compile(r"^## Switch to \S", re.MULTILINE)
 TAIL_BYTES = 512 * 1024
@@ -35,10 +35,10 @@ def rule_text(entrypoint):
     return f"""\
 # Model fit (model-fit plugin)
 
-When a task's shape becomes clear, and BEFORE doing the substantive work, judge whether the model \
-you are running on (your system prompt names it) fits the job. Raise it only when the mismatch is \
-material: about a tier off AND the task large enough to matter. Never for a quick question, a \
-single obvious edit or a conversational turn.
+Before EVERY coding task and every big non-coding task (research, writing, analysis, planning, \
+review), and before doing any of the work, check whether the model you are running on (your \
+system prompt names it) fits the job. Skip it for conversation, quick questions and follow-ups \
+inside a task you already checked.
 
 | Tier | Fits |
 |---|---|
@@ -46,15 +46,18 @@ single obvious edit or a conversational turn.
 | sonnet | The default working tier: features, bug fixes, refactors, reviews, most coding and writing |
 | opus / fable | Genuinely hard: novel architecture, subtle concurrency or data-corruption bugs, cross-system design, adversarial security reasoning — path unclear, being wrong is expensive |
 
-It cuts both ways: a strong model grinding through mechanical edits wastes limit; a weak model \
-quietly getting a hard design subtly wrong costs a redo.
+- Too complicated for your model → suggest moving UP (a weak model quietly getting a hard design \
+subtly wrong produces confident work that has to be redone).
+- Too easy for your model → suggest moving DOWN (a strong model grinding through mechanical work \
+wastes the user's limit).
+- It fits → say nothing about it and get on with the work. Never announce a passing check.
 
-If it is materially off, STOP before starting and send this as a plain chat message — NOT through \
+When it does not fit, STOP before starting and send this as a plain chat message — NOT through \
 AskUserQuestion, and with no report sections or other formatting. This overrides any other rule \
 about how to ask, including "decisions go through AskUserQuestion". Reword it to fit; keep it short:
 
     ## Switch to <model>?
-    <one line: why this task needs a different tier>
+    <one line: why this task belongs on a different tier>
 
     Switch ({switch_howto(entrypoint)}) or stay on <current model> — either way, send `continue`. \
 Whatever model is selected when you do counts as your answer.
@@ -63,25 +66,27 @@ Rules for that message:
 - Name the model you would choose and give a one-line reason. Do no work and make no tool calls in that turn.
 - Keep `## Switch to <model>?` as the heading exactly (the plugin recognises the answer by it).
 - Make the `continue` instruction the last words of the message, nothing after, so the client can offer `continue` as the suggested reply (Tab).
-- You cannot change the model yourself. Ask at most once per task; once the user has answered, \
-that decision stands for the whole session.
+- You cannot change the model yourself.
+- Ask at most once per task: after the user answers, that stands for the whole task however it \
+grows. A new, different task gets a fresh check — but do not re-suggest a move the user already \
+declined for the same kind of work.
 """
 
 
-CONFIRMED_AT_START = """\
-# Model fit (model-fit plugin)
-
-The user already answered a model-fit suggestion earlier in this session and the model they were \
-on at that moment is confirmed. Do not raise the model question again.
-"""
+REMINDER = (
+    "model-fit: if this message starts a coding task or a big non-coding task, first check the "
+    "model you are on fits it (too hard → suggest up, too easy → suggest down); if it does not, "
+    "send the plain-chat `## Switch to <model>?` message per the session-start rule. "
+    "Otherwise ignore this."
+)
 
 ANSWERED = """\
 # Model fit (model-fit plugin)
 
 The user's message answers your model suggestion. The model you are running on now (your system \
-prompt names it) is the one they chose — it counts as confirmed for the rest of the session. Do \
-not ask again. If it differs from what you suggested, that is their call; do not re-argue it. \
-Begin the work, opening with one short line such as "Confirmed on <model>."
+prompt names it) is the one they chose — it stands for this task. Do not ask again for it. If it \
+differs from what you suggested, that is their call; do not re-argue it. Begin the work, opening \
+with one short line such as "Confirmed on <model>."
 """
 
 
@@ -90,27 +95,6 @@ def read_event():
         return json.loads(sys.stdin.read() or "{}")
     except (ValueError, OSError):
         return None
-
-
-def state_path(session_id):
-    base = os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.join(tempfile.gettempdir(), "model-fit")
-    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", session_id)[:128]
-    return os.path.join(base, "sessions", safe + ".json")
-
-
-def is_confirmed(session_id):
-    try:
-        with open(state_path(session_id)) as fh:
-            return bool(json.load(fh).get("confirmed"))
-    except (OSError, ValueError):
-        return False
-
-
-def mark_confirmed(session_id):
-    path = state_path(session_id)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as fh:
-        json.dump({"confirmed": True}, fh)
 
 
 def last_assistant_text(transcript_path):
@@ -151,20 +135,13 @@ def main():
     if not isinstance(event, dict):
         return
     name = event.get("hook_event_name")
-    session_id = event.get("session_id") or ""
-    if not session_id:
-        return
     entrypoint = os.environ.get("CLAUDE_CODE_ENTRYPOINT", "")
 
     if name == "SessionStart":
-        emit(name, CONFIRMED_AT_START if is_confirmed(session_id) else rule_text(entrypoint))
+        emit(name, rule_text(entrypoint))
     elif name == "UserPromptSubmit":
-        if is_confirmed(session_id):
-            return
         text = last_assistant_text(event.get("transcript_path") or "")
-        if SUGGESTION_HEADING.search(text):
-            mark_confirmed(session_id)
-            emit(name, ANSWERED)
+        emit(name, ANSWERED if SUGGESTION_HEADING.search(text) else REMINDER)
 
 
 if __name__ == "__main__":

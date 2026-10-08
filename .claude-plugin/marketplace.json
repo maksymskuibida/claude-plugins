@@ -20,7 +20,7 @@
     {
       "name": "model-fit",
       "source": "./plugins/model-fit",
-      "description": "Before a big task Claude checks the session model fits it and, only when materially off, stops with a short chat suggestion to switch — with the right how-to for the CLI (/model) or the desktop app (model picker).",
+      "description": "Before every coding task or big non-coding task Claude checks the session model fits it; too hard → suggests up, too easy → suggests down, in a short chat message with the right how-to for the CLI (/model) or the desktop app (model picker).",
       "version": "1.0.0"
     }
   ]
