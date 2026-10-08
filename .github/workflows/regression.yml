@@ -29,6 +29,9 @@ jobs:
       - name: Run the regression suite
         run: bash plugins/worktree-cleanup/skills/worktree-cleanup/tests/regression.sh
 
+      - name: Run the model-fit hook tests
+        run: python3 -m unittest discover plugins/model-fit/tests
+
       - name: Validate the marketplace and the plugin
         # Best effort: the CLI is not always installable in CI, and a missing binary
         # must not read as a validation failure.
@@ -36,6 +39,7 @@ jobs:
           if command -v claude >/dev/null 2>&1; then
             claude plugin validate .
             claude plugin validate plugins/worktree-cleanup
+            claude plugin validate plugins/model-fit
           else
             echo "claude CLI unavailable; skipping manifest validation"
           fi

@@ -1,0 +1,7 @@
+{
+  "name": "model-fit",
+  "displayName": "Model Fit",
+  "version": "1.0.0",
+  "description": "Before a big task, Claude checks the session model fits it and — only when it is materially off — stops and suggests a switch in a short chat message, with the right how-to for the CLI or the desktop app.",
+  "author": { "name": "Maksym Skuibida" }
+}
