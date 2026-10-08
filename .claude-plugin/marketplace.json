@@ -16,6 +16,12 @@
       "source": "./plugins/worktree-cleanup",
       "description": "Find and remove orphaned git worktrees across many repos, gated on unpushed work, live sessions, and recent activity — re-verified at the moment of deletion, not at scan time.",
       "version": "2.0.0"
+    },
+    {
+      "name": "model-fit",
+      "source": "./plugins/model-fit",
+      "description": "Once per session, first thing, before any heavy work: Claude checks the session model fits the task (counting the re-cache cost of switching); too hard → suggests up, too easy → suggests down, fits → one line. Short chat message with the right how-to for the CLI (/model) or the desktop app (model picker).",
+      "version": "1.0.0"
     }
   ]
 }

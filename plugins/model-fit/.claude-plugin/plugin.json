@@ -1,0 +1,7 @@
+{
+  "name": "model-fit",
+  "displayName": "Model Fit",
+  "version": "1.0.0",
+  "description": "Once per session, first thing, before any heavy work: Claude checks the session model fits the task (counting the re-cache cost of switching); too hard → suggests up, too easy → suggests down, fits → one line. Short chat message with the right how-to for the CLI (/model) or the desktop app (model picker).",
+  "author": { "name": "Maksym Skuibida" }
+}

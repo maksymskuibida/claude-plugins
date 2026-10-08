@@ -30,6 +30,7 @@ Both forms are verified working with the `claude` CLI (`claude plugin marketplac
 | Plugin | What it does |
 |---|---|
 | [`response-format`](plugins/response-format) | One self-contained, fully linked report — Needs you / Done / Next / Risks — at hand-back or when you are needed; one plain line mid-flight. Applies automatically on enable, from the next session. |
+| [`model-fit`](plugins/model-fit) | Once per session, before any heavy work, Claude checks the session model fits the task (counting the re-cache cost of switching): too hard → suggests up, too easy → suggests down, fits → one line. Short chat message; CLI: `/model`, desktop: model picker. You reply `continue`. |
 | [`worktree-cleanup`](plugins/worktree-cleanup) | Reclaim disk from orphaned git worktrees without deleting unpushed work or a worktree a session is using. |
 
 ## Adding another plugin
